@@ -1,0 +1,43 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-net-service-endpoint-repair-001
+criteria:
+  - id: endpoints_count
+    invariant: endpoints_ready
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.endpoints, service: "{{app}}", namespace: "{{ns}}", min_ready: 3, port: {{port}}}
+  - id: http_via_service_dns
+    invariant: service_serves_http
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/healthz"
+      expect: reachable
+      status: 200
+      timeout_seconds: 3
+      attempts: 3
+  - id: pod_template_guard
+    invariant: deployment_template_unchanged
+    required: true
+    failure_class: constraint-violation
+    check:
+      type: k8s.unchanged
+      resource: {apiVersion: apps/v1, kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}
+      scope: jsonpaths
+      jsonpaths: [".spec.template"]
+      baseline: post-setup
+  - id: service_uid_guard
+    invariant: service_identity_preserved
+    required: true
+    failure_class: constraint-violation
+    check:
+      type: k8s.unchanged
+      resource: {kind: Service, name: "{{app}}", namespace: "{{ns}}"}
+      scope: jsonpaths
+      jsonpaths: [".metadata.uid", ".spec.clusterIP"]
+      baseline: post-setup

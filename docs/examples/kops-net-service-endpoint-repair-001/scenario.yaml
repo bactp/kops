@@ -1,0 +1,113 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-net-service-endpoint-repair-001
+revision: 1
+title: Restore traffic to a web Service that has no endpoints
+status: draft
+family_id: PF-NET-003
+difficulty:
+  level: 2
+  rationale: Requires diagnosing why endpoints are empty (two independent defects) rather than creating an object.
+tags: [service, endpoints, selector, targetport]
+
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-05
+    mapping_rationale: The agent must diagnose and repair broken Service-to-Pod routing; the skill exercised is troubleshooting, not Service creation.
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-02
+    mapping_rationale: Literal match to "Provide and troubleshoot access to applications via services".
+
+backend:
+  class: kind
+  kubernetes_version: "1.35"
+  topology: {control_planes: 1, workers: 2}
+  features: [audit-log]
+  isolation: namespace
+  namespaces: ["{{ns}}"]
+
+task:
+  statement_file: task.md
+  parameters:
+    ns:   {type: dns-label, prefix: shop-}
+    app:  {type: choice, choices: [catalog, basket, checkout]}
+    port: {type: port, min: 8000, max: 8999}
+  agent_context:
+    kube_context: kops
+    default_namespace: "{{ns}}"
+
+interfaces:
+  allowed: [kubectl, shell, file-read, file-write]
+  forbidden: [internet, ssh]
+  agent_identity: {kind: cluster-admin}
+  node_access: none
+
+initial_state:
+  description: >
+    Deployment {{app}} (3 replicas, label app={{app}},tier=web, containerPort {{port}}) is healthy.
+    Service {{app}} selects tier=frontend (wrong label) and targets port 80 (wrong port).
+  fixtures: [fixtures/deployment.yaml, fixtures/service-broken.yaml]
+  faults:
+    - {id: wrong_selector, category: wrong-reference, layer: object, description: Service selector does not match pod labels}
+    - {id: wrong_target_port, category: misconfiguration, layer: object, description: targetPort does not match containerPort}
+
+constraints:
+  - id: keep_pod_template
+    description: Do not modify the Deployment's pod template.
+    enforced_by: invariant
+    invariant: deployment_template_unchanged
+  - id: keep_service_identity
+    description: Keep the Service name and ClusterIP (do not delete/recreate it).
+    enforced_by: invariant
+    invariant: service_identity_preserved
+
+budgets:
+  max_steps: 30
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+
+expected_invariants:
+  - {id: endpoints_ready, kind: goal, required: true, description: Service has 3 ready endpoints on the container port}
+  - {id: service_serves_http, kind: goal, required: true, description: An in-cluster client receives HTTP 200 via the Service DNS name}
+  - {id: deployment_template_unchanged, kind: guard, required: true, description: Deployment pod template identical to post-setup state}
+  - {id: service_identity_preserved, kind: guard, required: true, description: Service UID and ClusterIP unchanged}
+
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 180
+  executes_on: runner
+  confirm:
+    must_fail: [endpoints_ready, service_serves_http]
+    must_pass: [deployment_template_unchanged, service_identity_preserved]
+
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle: {max_wait_seconds: 60, poll_interval_seconds: 3}
+  timeout_seconds: 180
+  credentials: verifier-admin
+
+reset:
+  strategy: namespace-delete
+  verify_baseline: true
+
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions: [reference/wrong-fix-selector-only.sh, reference/wrong-recreate-service.sh]
+
+metadata:
+  kubernetes_version: "1.35"
+  competency_model: kops-competency/v1.35-r1
+  authors: [kops-a2-team]
+  created: "2026-09-26"
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

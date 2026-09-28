@@ -1,0 +1,1092 @@
+# KOPS Problem-Family Catalog (C)
+#
+# Purpose: competency-level problem families extracted from 8 audited reference
+# repositories (~1,000 tasks) and deduplicated semantically. This is NOT a
+# question bank; no reference task text is reproduced. Families are the unit
+# for coverage planning; KOPS scenarios are authored clean-room per family.
+#
+# Conventions
+#   family_id           PF-<AREA>-<NNN>; AREA is topical, not certification-bound.
+#   modes               create | modify | repair | diagnose. Variants that differ only
+#                       in mode stay in ONE family unless the primary competency changes
+#                       (e.g. "configure Service" -> CKA-NET-03, "repair Service routing"
+#                       -> CKA-TRB-05 are separate families).
+#   profiles            default mapping: exactly one domain + competency per applicable
+#                       profile (competency ids: docs/competency-model.yaml). A scenario may
+#                       override with justification (scenario.yaml mapping_rationale).
+#                       `null` = profile not applicable.
+#   reference_repositories  repos containing >=1 task of this family.
+#   quarantined_topic_sources  repos/items that ALSO contain the family but are
+#                       quarantined (ckad-dojo, ckad-2026 Q01-Q16): recorded for
+#                       completeness of the audit; they contributed NOTHING beyond the
+#                       topic label, which is already in the public curriculum.
+#   evidence_examples   non-quarantined task ids for traceability (repo:id).
+#   invariants          candidate deterministic invariants (see criteria.schema.json types).
+#   backend             minimum KOPS backend class + required features.
+#   contamination_risk  risk that a NAIVE scenario in this family reproduces memorized
+#                       surface forms (low | medium | high); mitigation in notes.
+#
+# Source commits: see docs/reference-inventory.csv.
+# Competency model: kops-competency/v1.35-r1.
+
+catalog_version: pf-v0.1
+competency_model: kops-competency/v1.35-r1
+generated: "2026-09-26"
+
+families:
+
+# ───────────────────────── Workloads & deployment (WKL) ─────────────────────────
+- family_id: PF-WKL-001
+  name: Create or configure a Deployment (replicas, labels, ports, template)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-04}
+    ckad: {domain: design-build, competency: CKAD-ADB-02}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exams, ckad-exercises, ckad-2026]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-02, ck-x:ckad-001/Q1, ckad-2026:Q31]
+  environment: namespace; pinned app image that serves HTTP
+  invariants: [k8s.rollout_complete, "k8s.field replicas/labels/containerPort", "net.http via pod IP or Service"]
+  backend: {class: kind, features: []}
+  contamination_risk: high
+  contamination_notes: Canonical "nginx deployment with N replicas" is heavily memorized; use seeded names/images/ports and combine with a non-trivial constraint.
+
+- family_id: PF-WKL-002
+  name: Configure rollout strategy (RollingUpdate maxSurge/maxUnavailable, Recreate, minReadySeconds)
+  modes: [modify]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-01}
+    ckad: {domain: deployment, competency: CKAD-ADP-02}
+  reference_repositories: [grindxhq-cka, cka-hand-on-lab, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s2-16, cka-hand-on-lab:wrk-001, ckad-2026:Q37]
+  environment: existing Deployment
+  invariants: ["k8s.field .spec.strategy", "k8s.unchanged template (when only strategy should change)"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+  contamination_notes: Spec-only; strengthen by requiring an observed zero-downtime rollout (stability of available replicas).
+
+- family_id: PF-WKL-003
+  name: Perform rolling update and rollback (image change, history, undo to revision)
+  modes: [modify, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-01}
+    ckad: {domain: deployment, competency: CKAD-ADP-02}
+  reference_repositories: [grindxhq-cka, ck-x, cka-hand-on-lab, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q09"]
+  evidence_examples: [grindxhq-cka:s4-11, ck-x:cka-002/Q18, cka-hand-on-lab:wrk-003]
+  environment: Deployment with >=3 revisions, the latest broken (bad image or failing probe)
+  invariants: [k8s.rollout_complete, "k8s.field image == known-good revision image", "k8s.count ready pods", "k8s.unchanged Service"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+  contamination_notes: Parameterize revision count and which revision is "good" so recall of "undo" is insufficient.
+
+- family_id: PF-WKL-004
+  name: Implement deployment strategy (canary by replica ratio, blue/green Service switch)
+  modes: [create, modify]
+  profiles:
+    cka:  null
+    ckad: {domain: deployment, competency: CKAD-ADP-01}
+  reference_repositories: [ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q06"]
+  evidence_examples: [ckad-2026:Q36]
+  environment: two Deployment versions + one Service
+  invariants: ["k8s.endpoints composition by version label", "k8s.count replicas ratio", "net.http returns only new version (blue/green)"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+  contamination_notes: Canary-by-ratio item appears in a recall-sourced list; author with different traffic model (e.g., label switch + ratio) and seeded numbers.
+
+- family_id: PF-WKL-005
+  name: Run batch workloads with Job (completions, parallelism, backoffLimit, activeDeadlineSeconds, TTL)
+  modes: [create, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-04}
+    ckad: {domain: design-build, competency: CKAD-ADB-02}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-10, ck-x:ckad-001/Q20, ckad-2026:Q19]
+  environment: namespace; pinned batch image
+  invariants: ["k8s.condition Job Complete=True", "k8s.field completions/parallelism", "k8s.count succeeded pods"]
+  backend: {class: kind, features: []}
+  contamination_risk: high
+  contamination_notes: '"pi"/perl Job is a canonical memorized form (ckad-exercises); never use.'
+
+- family_id: PF-WKL-006
+  name: Schedule recurring work with CronJob (schedule, concurrencyPolicy, history limits, suspend)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-04}
+    ckad: {domain: design-build, competency: CKAD-ADB-02}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q02"]
+  evidence_examples: [ck-x:ckad-001/Q11, ckad-2026:Q27]
+  environment: namespace
+  invariants: ["k8s.field schedule/concurrencyPolicy/historyLimits", "k8s.exists Job created from CronJob (optional manual trigger)"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+  contamination_notes: Spec-level; add behavioural check by requiring a manual Job from the CronJob to complete.
+
+- family_id: PF-WKL-007
+  name: Choose and operate DaemonSet / StatefulSet (headless service, volumeClaimTemplates, ordered identity)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-04}
+    ckad: {domain: design-build, competency: CKAD-ADB-02}
+  reference_repositories: [grindxhq-cka, k16s, ck-x]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-09, grindxhq-cka:s2-06, k16s:cka/16, ck-x:cka-002/Q8]
+  environment: multi-node kind (DaemonSet); default StorageClass (StatefulSet)
+  invariants: ["k8s.count pods == eligible nodes", "k8s.field pod ordinal names", "k8s.count Bound PVCs per replica", "net.dns stable pod DNS via headless Service"]
+  backend: {class: kind, features: [default-storageclass]}
+  contamination_risk: low
+
+- family_id: PF-WKL-008
+  name: Multi-container Pod patterns (sidecar incl. native sidecar, adapter, ambassador, shared volume)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-04}
+    ckad: {domain: design-build, competency: CKAD-ADB-03}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s3-16, k16s:cka/17, ck-x:ckad-002/Q2, ckad-2026:Q53]
+  environment: app writing logs/files to a shared path
+  invariants: ["k8s.field containers[]/initContainers[restartPolicy=Always]", "node-free exec check: sidecar sees file written by main (via verifier exec)", "k8s.condition Ready"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-WKL-009
+  name: Gate startup with init containers (dependency wait, data preparation)
+  modes: [create, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-04}
+    ckad: {domain: design-build, competency: CKAD-ADB-03}
+  reference_repositories: [grindxhq-cka, ck-x, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-12, ck-x:ckad-002/Q14, ckad-exams:e1-08]
+  environment: app depends on a Service or prepared file
+  invariants: ["k8s.field initContainers", "k8s.condition Ready", "artifact/exec content prepared by init container"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-WKL-010
+  name: Configure container command/args, env and lifecycle hooks (postStart/preStop)
+  modes: [create, repair]
+  profiles:
+    cka:  null
+    ckad: {domain: design-build, competency: CKAD-ADB-02}
+  reference_repositories: [ck-x, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [ck-x:ckad-002/Q17, ckad-2026:Q24]
+  environment: namespace
+  invariants: ["k8s.field command/args/lifecycle", "k8s.condition Ready", "exec-based observable effect of hook"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-WKL-011
+  name: Configure workload autoscaling (HPA autoscaling/v2, targets, behavior)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-03}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s3-12, k16s:cka/15, ck-x:cka-002/Q4, cka-hand-on-lab:wrk-008]
+  environment: metrics-server; Deployment with CPU requests
+  invariants: ["k8s.field HPA spec (min/max/target/behavior)", "k8s.condition HPA ScalingActive=True", "(optional) scale-up observed under generated load within window"]
+  backend: {class: kind, features: [metrics-server]}
+  contamination_risk: medium
+  contamination_notes: Behavioural scaling checks are time-dependent; prefer ScalingActive + spec, use load test only with generous stability window.
+
+- family_id: PF-WKL-012
+  name: Protect availability during disruption (PodDisruptionBudget)
+  modes: [create]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-04}
+    ckad: null
+  reference_repositories: [grindxhq-cka, ckad-exams]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s3-13]
+  environment: multi-replica Deployment
+  invariants: ["k8s.field PDB minAvailable/maxUnavailable + selector matches", "eviction API denied when budget exhausted (verifier-side eviction probe)"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+# ───────────────────────── Configuration (CFG) ─────────────────────────
+- family_id: PF-CFG-001
+  name: Configure applications with ConfigMaps (env, envFrom, volume, items, immutable)
+  modes: [create, modify, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-02}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-05}
+  reference_repositories: [grindxhq-cka, ck-x, cka-hand-on-lab, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-05, grindxhq-cka:s4-13, ck-x:cka-001/Q9, ckad-2026:Q41]
+  environment: app that reads config from env and file and exposes it (e.g., /config endpoint)
+  invariants: ["k8s.field env[].valueFrom.configMapKeyRef / volume", "net.http app reports expected config value", "k8s.condition Ready"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-CFG-002
+  name: Create and consume Secrets (env, volume, docker-registry, TLS; no plaintext in spec)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-02}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-06}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q01"]
+  evidence_examples: [grindxhq-cka:s1-06, k16s:cka2/12, ck-x:ckad-001/Q10, ckad-2026:Q54]
+  environment: app consuming credentials
+  invariants: ["k8s.field secretKeyRef / secret volume readOnly", "guard: no literal secret value in pod spec (k8s.field regex absent)", "net.http app authenticated to dependency"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+  contamination_notes: '"Move hard-coded env into Secret" is a recall-list item (quarantined source); author distinct framings.'
+
+- family_id: PF-CFG-003
+  name: Expose metadata and compose volumes (Downward API, projected volumes)
+  modes: [create]
+  profiles:
+    cka:  null
+    ckad: {domain: design-build, competency: CKAD-ADB-04}
+  reference_repositories: [grindxhq-cka, ckad-2026]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s3-14, ckad-2026:Q62, ckad-2026:Q67]
+  environment: namespace
+  invariants: ["k8s.field downwardAPI/projected sources", "exec: file contents equal pod metadata"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-CFG-004
+  name: Define container resource requests and limits (incl. OOMKilled/CPU throttling fixes)
+  modes: [create, modify, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-05}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-04}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q16"]
+  evidence_examples: [grindxhq-cka:s4-10, k16s:cka2/02, ck-x:cka-002/Q20, ckad-2026:Q33]
+  environment: workload with memory-hungry container
+  invariants: ["k8s.field resources.requests/limits within bounds", "stability: restartCount unchanged over window", "k8s.field lastState.terminated.reason != OOMKilled after fix"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-CFG-005
+  name: Enforce namespace resource policy (ResourceQuota, LimitRange) and resolve quota-blocked workloads
+  modes: [create, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-05}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-03}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-01, grindxhq-cka:s4-04, k16s:cka2/04, ck-x:cka-002/Q14]
+  environment: namespace with quota; Deployment unable to create pods
+  invariants: ["k8s.field ResourceQuota hard / LimitRange defaults", "k8s.count ready replicas", "guard: quota not deleted or raised beyond allowed bound"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+# ───────────────────────── Security & access (SEC) ─────────────────────────
+- family_id: PF-SEC-001
+  name: Grant least-privilege namespaced access (Role/RoleBinding for ServiceAccount or user)
+  modes: [create]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-01}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-02}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exams, ckad-2026]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-16, k16s:cka/08, ck-x:cka-001/Q5, ckad-2026:Q55]
+  environment: namespace + ServiceAccount + workload using it
+  invariants: ["k8s.can_i allow matrix (required verbs)", "k8s.can_i deny matrix (least privilege: other verbs/resources/namespaces)", "workload succeeds using API (log/status evidence)"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+  contamination_notes: Deny-matrix checks are what distinguish KOPS from spec-only references.
+
+- family_id: PF-SEC-002
+  name: Grant cluster-scoped access (ClusterRole/ClusterRoleBinding, aggregation, nodes/PV access)
+  modes: [create]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-01}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-02}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, ckad-2026]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s2-10, k16s:cka2/06, ck-x:ckad-001/Q13]
+  environment: cluster
+  invariants: ["k8s.can_i allow/deny across namespaces", "k8s.field roleRef/subjects"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-SEC-003
+  name: Diagnose and fix authorization failures (Forbidden errors in workload logs)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-01}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-02}
+  reference_repositories: [grindxhq-cka, ckad-2026]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q03"]
+  evidence_examples: [grindxhq-cka:s4-09, ckad-2026:Q66]
+  environment: controller-like workload failing with 403
+  invariants: ["k8s.can_i allow for needed verb", "k8s.can_i deny for unneeded verbs (no cluster-admin shortcut)", "workload log/status shows success"]
+  backend: {class: kind, features: [audit-log]}
+  contamination_risk: medium
+
+- family_id: PF-SEC-004
+  name: Configure ServiceAccounts for workloads (dedicated SA, automount off, projected/bounded tokens)
+  modes: [create, repair]
+  profiles:
+    cka:  null
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-07}
+  reference_repositories: [grindxhq-cka, ck-x, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q04"]
+  evidence_examples: [ck-x:cks-001/Q7, ckad-2026:Q65]
+  environment: namespace
+  invariants: ["k8s.field serviceAccountName / automountServiceAccountToken", "exec: token file present/absent as required"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-SEC-005
+  name: Harden workloads with securityContext and capabilities (non-root, RO rootfs, fsGroup, drop caps)
+  modes: [create, modify]
+  profiles:
+    cka:  null
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-08}
+  reference_repositories: [grindxhq-cka, ck-x, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q11"]
+  evidence_examples: [grindxhq-cka:s4-17, ck-x:ckad-002/Q11, ckad-2026:Q57]
+  environment: app that must still function under restrictions
+  invariants: ["k8s.field securityContext fields", "exec: id -u != 0; write to / fails", "k8s.condition Ready (app still works)"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-SEC-006
+  name: Apply Pod Security Admission to namespaces and make workloads compliant
+  modes: [create, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-05}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-02}
+  reference_repositories: [grindxhq-cka, ck-x, cka-hand-on-lab]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s3-08, grindxhq-cka:s4-15, ck-x:cka-002/Q6, cka-hand-on-lab:arc-008]
+  environment: namespace with non-compliant Deployment
+  invariants: ["k8s.field namespace labels pod-security.kubernetes.io/*", "k8s.rollout_complete of compliant workload", "server-side dry-run of privileged pod rejected (verifier probe)"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-SEC-007
+  name: Manage user access credentials (CSR create/approve, kubeconfig user/context)
+  modes: [create]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-01}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-02}
+  reference_repositories: [grindxhq-cka, k16s, cka-hand-on-lab]
+  quarantined_topic_sources: []
+  evidence_examples: [grindxhq-cka:s5-04, grindxhq-cka:s5-16, k16s:cka2/07]
+  environment: cluster CA signer; workstation kubeconfig
+  invariants: ["k8s.condition CSR Approved + certificate issued", "artifact: kubeconfig authenticates as user (verifier runs kubectl auth whoami with it)", "k8s.can_i as user matches spec"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+# ───────────────────────── Services & networking (NET) ─────────────────────────
+- family_id: PF-NET-001
+  name: Expose applications with Services (ClusterIP, NodePort, named ports, multi-port)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: services-networking, competency: CKA-NET-03}
+    ckad: {domain: services-networking, competency: CKAD-SNW-02}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q13"]
+  evidence_examples: [grindxhq-cka:s1-04, k16s:cka2/15, ck-x:ckad-001/Q17, ckad-2026:Q70]
+  environment: Deployment serving HTTP on non-default port
+  invariants: ["k8s.endpoints ready count", "net.http via Service DNS", "net.http via nodeIP:nodePort (NodePort)"]
+  backend: {class: kind, features: []}
+  contamination_risk: high
+  contamination_notes: '"expose nginx on port 80" forms are memorized; seed ports/names.'
+
+- family_id: PF-NET-002
+  name: Use other Service types and endpoints (LoadBalancer, headless, ExternalName, EndpointSlices)
+  modes: [create]
+  profiles:
+    cka:  {domain: services-networking, competency: CKA-NET-03}
+    ckad: {domain: services-networking, competency: CKAD-SNW-02}
+  reference_repositories: [k16s, ck-x, ckad-2026]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [k16s:cka2/13, ck-x:ckad-002/Q6, ckad-2026:Q72, ckad-2026:Q73]
+  environment: loadbalancer implementation for LB type
+  invariants: ["k8s.field status.loadBalancer.ingress", "net.dns headless returns pod IPs", "net.dns ExternalName CNAME"]
+  backend: {class: kind, features: [loadbalancer]}
+  contamination_risk: low
+
+- family_id: PF-NET-003
+  name: Repair Service-to-Pod routing (selector/targetPort mismatch, empty endpoints)
+  modes: [repair, diagnose]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-05}
+    ckad: {domain: services-networking, competency: CKAD-SNW-02}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q12"]
+  evidence_examples: [grindxhq-cka:s4-03, grindxhq-cka:s4-12, k16s:cka2/03, ck-x:ckad-001/Q7, cka-hand-on-lab:trb-003]
+  environment: Deployment + broken Service; probe pod
+  invariants: ["k8s.endpoints min_ready on correct port", "net.http via Service DNS", "guard: k8s.unchanged Deployment template", "guard: Service UID/ClusterIP preserved"]
+  backend: {class: kind, features: []}
+  contamination_risk: high
+  contamination_notes: The single most common troubleshooting item across references; mitigate with two simultaneous faults, seeded names, and guards that forbid the "recreate everything" shortcut.
+
+- family_id: PF-NET-004
+  name: Define and enforce ingress NetworkPolicies (default-deny, allow by pod/namespace selector and port)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: services-networking, competency: CKA-NET-02}
+    ckad: {domain: services-networking, competency: CKAD-SNW-01}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-15, k16s:cka/11, ck-x:cka-001/Q6, cka-hand-on-lab:net-010, ckad-exams:e0-10, ckad-2026:Q63]
+  environment: NetworkPolicy-enforcing CNI; client pods in several namespaces
+  invariants: ["net.http expect=reachable for each allowed (src,dst,port)", "net.http expect=blocked for each disallowed pair", "guard: no deletion of other policies"]
+  backend: {class: kind, features: [networkpolicy]}
+  contamination_risk: medium
+  contamination_notes: References mostly grade structurally; KOPS grades by connectivity matrix, which also defeats spec-shaped but semantically wrong policies.
+
+- family_id: PF-NET-005
+  name: Egress NetworkPolicies (DNS allowance, ipBlock/except, egress to specific services)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: services-networking, competency: CKA-NET-02}
+    ckad: {domain: services-networking, competency: CKAD-SNW-01}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-2026]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [k16s:cka2/14, cka-hand-on-lab:net-012, ckad-2026:Q76]
+  environment: NetworkPolicy-enforcing CNI; external/test endpoints inside cluster
+  invariants: ["net.dns resolves (DNS egress allowed)", "net.tcp reachable/blocked matrix"]
+  backend: {class: kind, features: [networkpolicy]}
+  contamination_risk: low
+
+- family_id: PF-NET-006
+  name: Restore connectivity blocked by NetworkPolicy (fix labels or policy, keep isolation)
+  modes: [repair, diagnose]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-05}
+    ckad: {domain: services-networking, competency: CKAD-SNW-01}
+  reference_repositories: [grindxhq-cka]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q07"]
+  evidence_examples: [grindxhq-cka:s4-07]
+  environment: deny-all + partial allow policies; broken app path
+  invariants: ["net.http intended path reachable", "net.http non-intended paths still blocked (no policy deletion shortcut)"]
+  backend: {class: kind, features: [networkpolicy]}
+  contamination_risk: medium
+
+- family_id: PF-NET-007
+  name: Expose HTTP applications with Ingress (host/path rules, pathType, TLS, default backend; incl. repair)
+  modes: [create, repair]
+  profiles:
+    cka:  {domain: services-networking, competency: CKA-NET-05}
+    ckad: {domain: services-networking, competency: CKAD-SNW-03}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q14", "ckad-2026 Q15"]
+  evidence_examples: [grindxhq-cka:s3-11, k16s:cka/13, ck-x:ckad-001/Q19, cka-hand-on-lab:net-003, ckad-2026:Q77]
+  environment: ingress controller; two backend services
+  invariants: ["net.http with Host header + path returns backend-specific body", "net.http TLS handshake presents expected cert CN", "k8s.field ingressClassName"]
+  backend: {class: kind, features: [ingress-controller]}
+  contamination_risk: medium
+  contamination_notes: References mostly check spec only (no controller installed); KOPS requires traffic through the controller.
+
+- family_id: PF-NET-008
+  name: Manage ingress traffic with Gateway API (Gateway, HTTPRoute matches, TLS, weighted backends)
+  modes: [create, modify, repair]
+  profiles:
+    cka:  {domain: services-networking, competency: CKA-NET-04}
+    ckad: null
+  reference_repositories: [k16s, ck-x, cka-hand-on-lab]
+  quarantined_topic_sources: []
+  evidence_examples: [k16s:cka/12, ck-x:cka-002/Q13, cka-hand-on-lab:net-008]
+  environment: Gateway API CRDs + controller (backend feature gateway-api)
+  invariants: ["k8s.condition Gateway Programmed=True, HTTPRoute Accepted/ResolvedRefs=True", "net.http routed by path/header to expected backend", "traffic split ratio within tolerance over N requests"]
+  backend: {class: kind, features: [gateway-api]}
+  contamination_risk: low
+  contamination_notes: Newer curriculum topic; less memorized. None of the references test real traffic.
+
+- family_id: PF-NET-009
+  name: Configure and repair CoreDNS (Corefile stub/forward/rewrite, scaled-down or broken CoreDNS)
+  modes: [modify, repair]
+  profiles:
+    cka:  {domain: services-networking, competency: CKA-NET-06}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s3-06, grindxhq-cka:s3-07, k16s:cka/14, cka-hand-on-lab:net-006, cka-hand-on-lab:trb-007]
+  environment: "kube-system CoreDNS (cluster-scoped mutation => isolation: cluster)"
+  invariants: ["net.dns cluster Service name resolves from probe pod", "net.dns custom zone resolves as specified", "k8s.rollout_complete coredns", "guard: kube-dns Service unchanged"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-NET-010
+  name: Diagnose Pod-to-Pod and Service DNS connectivity (cross-node, service discovery)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: services-networking, competency: CKA-NET-01}
+    ckad: {domain: services-networking, competency: CKAD-SNW-02}
+  reference_repositories: [ck-x, cka-hand-on-lab]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [ck-x:cka-002/Q9, ck-x:cka-002/Q10, cka-hand-on-lab:net-004]
+  environment: multi-node kind; app spanning nodes
+  invariants: ["net.tcp pod-to-pod across nodes", "net.dns FQDN resolution", "artifact: answer file with discovered value (only when diagnosis output is the goal)"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-NET-011
+  name: Troubleshoot cluster networking components (CNI config/pods broken, kube-proxy failure)
+  modes: [repair, diagnose]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-02}
+    ckad: null
+  reference_repositories: [cka-hand-on-lab]
+  quarantined_topic_sources: []
+  evidence_examples: [cka-hand-on-lab:trb-012]
+  environment: node file access for CNI conf; kube-proxy DaemonSet/ConfigMap
+  invariants: ["k8s.condition nodes Ready", "net.tcp cross-node pod traffic", "net.http Service VIP reachable (kube-proxy)", "node.file CNI conf valid"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: low
+  contamination_notes: Described in cka-hand-on-lab but never injected there; no reference implements it.
+
+# ───────────────────────── Storage (STO) ─────────────────────────
+- family_id: PF-STO-001
+  name: Dynamic provisioning with StorageClasses (default class, binding mode, expansion)
+  modes: [create, modify, repair]
+  profiles:
+    cka:  {domain: storage, competency: CKA-STO-01}
+    ckad: {domain: design-build, competency: CKAD-ADB-04}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s2-07, grindxhq-cka:s2-08, k16s:cka2/16, ck-x:cka-002/Q2, cka-hand-on-lab:trb-011]
+  environment: default-storageclass provisioner
+  invariants: ["k8s.field storageclass.kubernetes.io/is-default-class exactly one", "k8s.field PVC phase Bound + storageClassName", "k8s.field capacity after expansion"]
+  backend: {class: kind, features: [default-storageclass]}
+  contamination_risk: low
+
+- family_id: PF-STO-002
+  name: Manage PersistentVolumes and Claims (static binding, access modes, capacity; fix binding mismatch)
+  modes: [create, repair]
+  profiles:
+    cka:  {domain: storage, competency: CKA-STO-03}
+    ckad: {domain: design-build, competency: CKAD-ADB-04}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-07, grindxhq-cka:s4-08, k16s:cka/18, ck-x:cka-002/Q3, ckad-2026:Q21]
+  environment: node-local path for hostPath/local PV
+  invariants: ["k8s.field PV/PVC Bound to each other", "k8s.condition consumer pod Ready", "exec: data written survives pod restart"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-STO-003
+  name: Configure volume reclaim policy and recover retained data (Retain, Released PV rebind)
+  modes: [modify, repair]
+  profiles:
+    cka:  {domain: storage, competency: CKA-STO-02}
+    ckad: null
+  reference_repositories: [k16s]
+  quarantined_topic_sources: []
+  evidence_examples: [k16s:cka2/17]
+  environment: Released PV holding data
+  invariants: ["k8s.field PV reclaimPolicy", "k8s.field new PVC Bound to the original PV", "exec: original data present"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-STO-004
+  name: Mount persistent and ephemeral volumes in Pods (PVC, emptyDir incl. sizeLimit/medium, hostPath, subPath)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: storage, competency: CKA-STO-02}
+    ckad: {domain: design-build, competency: CKAD-ADB-04}
+  reference_repositories: [grindxhq-cka, ck-x, cka-hand-on-lab, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [cka-hand-on-lab:sto-004, ckad-2026:Q20, ckad-2026:Q22]
+  environment: namespace
+  invariants: ["k8s.field volumeMounts", "exec: file shared/persisted as required"]
+  backend: {class: kind, features: [default-storageclass]}
+  contamination_risk: high
+  contamination_notes: '"mypvc/myvolume" forms memorized (ckad-exercises); seed names.'
+
+# ───────────────────────── Scheduling (SCH) ─────────────────────────
+- family_id: PF-SCH-001
+  name: Place Pods on nodes (nodeSelector, node affinity required/preferred, nodeName)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-05}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s1-08, grindxhq-cka:s2-01, k16s:cka2/08, ck-x:cka-002/Q5]
+  environment: multi-node kind with labelled nodes (roles resolved by runner)
+  invariants: ["k8s.field pod spec.nodeName in allowed node set", "k8s.field affinity terms", "guard: node labels of other nodes unchanged"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-SCH-002
+  name: Control placement with taints and tolerations (without removing protective taints)
+  modes: [create, modify, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-05}
+    ckad: null
+  reference_repositories: [grindxhq-cka, ck-x, cka-hand-on-lab, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s2-03, ck-x:cka-002/Q7, cka-hand-on-lab:wrk-006]
+  environment: multi-node kind with tainted pool
+  invariants: ["k8s.field pods scheduled on tainted pool", "guard: node taints unchanged", "k8s.field tolerations"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-SCH-003
+  name: Spread and co-locate workloads (pod anti-/affinity, topologySpreadConstraints)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-05}
+    ckad: null
+  reference_repositories: [grindxhq-cka, ck-x]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s2-04, ck-x:cka-001/Q7]
+  environment: ">=3 schedulable nodes"
+  invariants: ["k8s.count distinct nodes across replicas", "k8s.field topologySpreadConstraints/affinity"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-SCH-004
+  name: Prioritize workloads (PriorityClass, preemption)
+  modes: [create]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-05}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s, ck-x]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s2-05, k16s:cka2/10, ck-x:cka-002/Q19]
+  environment: resource-constrained node pool
+  invariants: ["k8s.field priorityClassName/value", "k8s.condition high-priority pod Ready while low-priority preempted (deterministic capacity setup)"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-SCH-005
+  name: Diagnose Pending Pods (insufficient resources, unsatisfiable affinity, taints, unbound PVC)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-05}
+    ckad: {domain: observability-maintenance, competency: CKAD-AOM-05}
+  reference_repositories: [k16s, ckad-2026]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [k16s:cka/03, ckad-2026:Q47]
+  environment: multi-node kind; scheduling-constrained workload
+  invariants: ["k8s.condition PodScheduled=True and Ready", "guard: constraint that must remain (e.g., quota, taint) unchanged"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-SCH-006
+  name: Node maintenance (cordon, drain respecting PDBs/DaemonSets, uncordon)
+  modes: [modify]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-04}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s5-11, k16s:cka/07]
+  environment: multi-node kind with workloads + PDB
+  invariants: ["k8s.count non-DaemonSet pods on target node == 0 (at checkpoint)", "k8s.field node unschedulable as required", "k8s.count app ready replicas never below PDB (stability)"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+  contamination_notes: Both references have vacuous checks for this family (pass on initial state); KOPS negative control required.
+
+- family_id: PF-SCH-007
+  name: Run static Pods on a specific node (kubelet-managed manifests)
+  modes: [create, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-04}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s, ck-x]
+  quarantined_topic_sources: []
+  evidence_examples: [grindxhq-cka:s5-01, k16s:cka/10]
+  environment: node file access
+  invariants: ["k8s.exists mirror pod <name>-<node>", "node.file manifest in staticPodPath of intended node", "k8s.condition mirror pod Ready"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: low
+  contamination_notes: "Mapping ambiguity flagged for review: could also be argued as CKA-ARC-03 or CKA-TRB-01; CK-X grades it by grep on a host without kubelet (invalid)."
+
+# ───────────────────────── Observability & debugging (OBS) ─────────────────────────
+- family_id: PF-OBS-001
+  name: Implement probes and health checks (liveness, readiness, startup; http/tcp/exec)
+  modes: [create, modify, repair]
+  profiles:
+    cka:  {domain: workloads-scheduling, competency: CKA-WLS-04}
+    ckad: {domain: observability-maintenance, competency: CKAD-AOM-02}
+  reference_repositories: [grindxhq-cka, ck-x, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q10"]
+  evidence_examples: [grindxhq-cka:s1-13, ck-x:cka-001/Q10, ck-x:ckad-002/Q16, ckad-2026:Q44]
+  environment: app with slow start and separate health/readiness endpoints
+  invariants: ["k8s.field probe type/path/port", "stability: restartCount unchanged over window", "k8s.endpoints excludes not-ready pod (readiness semantics)"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+
+- family_id: PF-OBS-002
+  name: "Evaluate container output streams (logs: previous, multi-container, filtering) to find facts"
+  modes: [diagnose]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-04}
+    ckad: {domain: observability-maintenance, competency: CKAD-AOM-04}
+  reference_repositories: [cka-hand-on-lab, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [cka-hand-on-lab:trb-006, ckad-exams:e1-09, ckad-2026:Q46]
+  environment: app emitting seeded log facts (e.g., failing dependency name) across restarts/containers
+  invariants: ["artifact: answer file equals seeded fact (exact match)", "or goal state depending on the log-derived fact (preferred)"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+  contamination_notes: Prefer tasks where the log-derived fact must be acted upon (state check) over "write the log line to a file".
+
+- family_id: PF-OBS-003
+  name: Monitor resource usage with built-in tools (kubectl top, metrics API) and act on it
+  modes: [diagnose]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-03}
+    ckad: {domain: observability-maintenance, competency: CKAD-AOM-03}
+  reference_repositories: [k16s, ck-x, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [k16s:cka/05, ck-x:cka-002/Q15, ckad-2026:Q49]
+  environment: metrics-server; seeded workloads with deterministic, well-separated usage
+  invariants: ["artifact: identified pod/node equals seeded top consumer", "or corrective action applied to that workload (state check)"]
+  backend: {class: kind, features: [metrics-server]}
+  contamination_risk: low
+  contamination_notes: Metrics are noisy; seed usage gaps large enough (e.g., 10x) to make the answer deterministic.
+
+- family_id: PF-OBS-004
+  name: Debug failing Pods (CrashLoopBackOff, ImagePullBackOff, bad command, CreateContainerConfigError, OOMKilled)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-04}
+    ckad: {domain: observability-maintenance, competency: CKAD-AOM-05}
+  reference_repositories: [grindxhq-cka, k16s, ck-x, cka-hand-on-lab, ckad-exams, ckad-2026]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s2-12, grindxhq-cka:s4-06, k16s:cka/02, ck-x:ckad-001/Q5, cka-hand-on-lab:trb-001, ckad-2026:Q45]
+  environment: workload with seeded root cause visible via describe/logs/events
+  invariants: ["k8s.rollout_complete", "stability: no restarts over window", "guard: root-cause-appropriate fix (e.g., image tag == valid pinned tag, not a different app)"]
+  backend: {class: kind, features: []}
+  contamination_risk: high
+  contamination_notes: '"image nginx:latestt typo" is the canonical form; use realistic, seeded root causes and multi-fault variants.'
+
+- family_id: PF-OBS-005
+  name: Understand API deprecations (migrate manifests to served API versions)
+  modes: [repair]
+  profiles:
+    cka:  null
+    ckad: {domain: observability-maintenance, competency: CKAD-AOM-01}
+  reference_repositories: []
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q08"]
+  evidence_examples: []
+  environment: manifest files in workstation using removed API versions
+  invariants: ["k8s.exists objects applied from corrected manifests", "artifact: manifest uses served apiVersion (verifier runs server-side dry-run)"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+  contamination_notes: Only present in quarantined sources in this corpus; author from the Kubernetes deprecation guide.
+
+- family_id: PF-OBS-006
+  name: Query cluster state with kubectl output shaping (jsonpath, custom-columns, sorting, events, api-resources)
+  modes: [diagnose]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-03}
+    ckad: {domain: observability-maintenance, competency: CKAD-AOM-03}
+  reference_repositories: [grindxhq-cka, k16s, ck-x]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s5-05, grindxhq-cka:s5-15, k16s:cka2/05, ck-x:ckad-002/Q19]
+  environment: cluster with seeded objects/events
+  invariants: ["artifact: file content equals verifier-computed expected output (normalized)"]
+  backend: {class: kind, features: []}
+  contamination_risk: medium
+  contamination_notes: Artifact-only family; keep few in corpus (low operational signal) and compute expected output at verify time, never hard-coded.
+
+# ───────────────────────── Packaging & extension (PKG, EXT, IMG) ─────────────────────────
+- family_id: PF-PKG-001
+  name: Deploy and manage packages with Helm (install/upgrade with values, rollback, template)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-06}
+    ckad: {domain: deployment, competency: CKAD-ADP-03}
+  reference_repositories: [k16s, ck-x, cka-hand-on-lab, ckad-exams, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [k16s:cka2/18, ck-x:cka-002/Q11, ckad-exams:e0-14, cka-hand-on-lab:arc-006]
+  environment: OFFLINE chart repository/OCI registry with KOPS-authored charts (helm-repo-mirror)
+  invariants: ["helm release status deployed + revision count (verifier runs helm with admin kubeconfig)", "helm get values matches required values", "k8s.rollout_complete of chart workload"]
+  backend: {class: kind, features: [helm-repo-mirror]}
+  contamination_risk: medium
+  contamination_notes: References depend on public Bitnami charts (fragile, changed in 2025); KOPS must ship its own charts offline.
+
+- family_id: PF-PKG-002
+  name: Repair failed or pending Helm releases
+  modes: [repair]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-06}
+    ckad: {domain: deployment, competency: CKAD-ADP-03}
+  reference_repositories: [ck-x]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [ck-x:helm-001/Q12]
+  environment: release in failed/pending-upgrade state
+  invariants: ["helm status deployed", "no orphaned resources from failed revision", "workload healthy"]
+  backend: {class: kind, features: [helm-repo-mirror]}
+  contamination_risk: low
+
+- family_id: PF-PKG-003
+  name: Customize manifests with Kustomize (bases/overlays, patches, generators)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-06}
+    ckad: {domain: deployment, competency: CKAD-ADP-04}
+  reference_repositories: [k16s, ck-x, cka-hand-on-lab]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [k16s:cka2/09, ck-x:cka-002/Q12, cka-hand-on-lab:arc-007]
+  environment: kustomize base in workstation
+  invariants: ["k8s.field applied objects reflect overlay (labels, replicas, images)", "artifact: kustomize build output validates (verifier-side)"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-EXT-001
+  name: Discover and use API extensions (CRDs, custom resources)
+  modes: [create, diagnose]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-08}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-01}
+  reference_repositories: [grindxhq-cka, ck-x, cka-hand-on-lab, ckad-exams, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo]
+  evidence_examples: [grindxhq-cka:s5-07, ck-x:ckad-001/Q15, cka-hand-on-lab:arc-003]
+  environment: cluster
+  invariants: ["k8s.condition CRD Established", "k8s.exists custom resource with valid schema fields", "server-side validation rejects invalid CR (verifier probe)"]
+  backend: {class: kind, features: []}
+  contamination_risk: low
+
+- family_id: PF-EXT-002
+  name: Install and configure an operator and drive it through its custom resources
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-08}
+    ckad: {domain: environment-config-security, competency: CKAD-AEC-01}
+  reference_repositories: []
+  quarantined_topic_sources: []
+  evidence_examples: []
+  environment: offline operator bundle (KOPS-authored minimal operator or pinned upstream)
+  invariants: ["k8s.rollout_complete operator", "k8s.condition CR Ready as reported by operator", "k8s.exists operator-managed child objects"]
+  backend: {class: kind, features: [image-registry]}
+  contamination_risk: low
+  contamination_notes: GAP — no reference covers operator installation.
+
+- family_id: PF-EXT-003
+  name: Understand extension interfaces (CRI/CSI/CNI) — identify and configure plugin endpoints
+  modes: [diagnose, modify]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-07}
+    ckad: null
+  reference_repositories: []
+  quarantined_topic_sources: []
+  evidence_examples: []
+  environment: node access (crictl runtime endpoint, CNI conf dir, CSIDriver objects)
+  invariants: ["node.exec crictl works with configured endpoint", "artifact: identified CNI/CRI details equal verifier-computed", "k8s.exists CSIDriver/StorageClass wiring"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: low
+  contamination_notes: GAP — no reference covers this competency explicitly.
+
+- family_id: PF-IMG-001
+  name: Define, build and modify container images (Dockerfile/Containerfile, multi-stage, tag, push, export)
+  modes: [create, modify]
+  profiles:
+    cka:  null
+    ckad: {domain: design-build, competency: CKAD-ADB-01}
+  reference_repositories: [ck-x, ckad-exams, ckad-2026, ckad-exercises]
+  quarantined_topic_sources: [ckad-dojo, "ckad-2026 Q05"]
+  evidence_examples: [ck-x:ckad-002/Q12, ck-x:ckad-001/Q21, ckad-exams:e0-13]
+  environment: rootless image builder in workstation (podman/buildah) + in-cluster registry
+  invariants: ["registry manifest exists for tag; config.User/labels as required (verifier inspects)", "k8s.condition pod running the built image Ready", "net.http app behaviour from build"]
+  backend: {class: kind, features: [image-registry]}
+  contamination_risk: medium
+
+# ───────────────────────── Cluster lifecycle (CLU) — system level ─────────────────────────
+- family_id: PF-CLU-001
+  name: Back up etcd (snapshot save with correct endpoints/certs, verify snapshot)
+  modes: [create]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-04}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s, cka-hand-on-lab]
+  quarantined_topic_sources: []
+  evidence_examples: [grindxhq-cka:s3-01, grindxhq-cka:s4-02, k16s:cka/06]
+  environment: node access to control plane; etcdctl/etcdutl
+  invariants: ["artifact(node): verifier runs etcdutl snapshot status -> valid, revision >= setup marker revision", "artifact contains seeded marker key (verifier restores snapshot into scratch dir and reads key)"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: high
+  contamination_notes: Standard etcdctl command with default kubeadm cert paths is fully memorized; skill still meaningful (paths discovered, snapshot valid). Vary target paths, require marker-key presence.
+
+- family_id: PF-CLU-002
+  name: Restore etcd from snapshot and bring the control plane back consistently
+  modes: [repair]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-04}
+    ckad: null
+  reference_repositories: [grindxhq-cka]
+  quarantined_topic_sources: []
+  evidence_examples: [grindxhq-cka:s3-02, grindxhq-cka:s5-14]
+  environment: provided snapshot containing seeded objects; post-snapshot objects that must disappear
+  invariants: ["k8s.exists seeded pre-snapshot objects", "k8s.exists post-snapshot object == absent", "k8s.condition all nodes Ready; control-plane pods Ready"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: medium
+  contamination_notes: grindxhq explicitly does NOT require rewiring etcd to the restored data dir; KOPS requires the full restore.
+
+- family_id: PF-CLU-003
+  name: Upgrade a kubeadm cluster (control plane then workers, drain/uncordon)
+  modes: [modify]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-04}
+    ckad: null
+  reference_repositories: []
+  quarantined_topic_sources: []
+  evidence_examples: []
+  environment: VM nodes with package repo mirror for N and N+1 minor versions
+  invariants: ["k8s.field node kubeletVersion == target on all nodes", "node.exec kubeadm version == target", "k8s.field control-plane images == target", "workloads remained available (stability)"]
+  backend: {class: vm, features: []}
+  contamination_risk: medium
+  contamination_notes: GAP — no reference implements an upgrade.
+
+- family_id: PF-CLU-004
+  name: Create and extend clusters with kubeadm (init, join worker, tokens)
+  modes: [create]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-03}
+    ckad: null
+  reference_repositories: [grindxhq-cka, cka-hand-on-lab]
+  quarantined_topic_sources: []
+  evidence_examples: [grindxhq-cka:s5-02, cka-hand-on-lab:arc-004]
+  environment: bare nodes with packages (vm); kind-node experimental for re-join of a reset worker
+  invariants: ["k8s.condition new node Ready", "k8s.field node labels/roles", "node.systemd kubelet active+enabled"]
+  backend: {class: vm, features: []}
+  contamination_risk: low
+  contamination_notes: References only write config files (no real join).
+
+- family_id: PF-CLU-005
+  name: Prepare node infrastructure for installing Kubernetes (runtime, kernel modules, sysctl, swap, packages)
+  modes: [create, repair]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-02}
+    ckad: null
+  reference_repositories: []
+  quarantined_topic_sources: []
+  evidence_examples: []
+  environment: bare VM
+  invariants: ["node.exec lsmod/sysctl values", "node.systemd containerd active+enabled; SystemdCgroup configured", "node.exec kubeadm init phase preflight passes"]
+  backend: {class: vm, features: []}
+  contamination_risk: low
+  contamination_notes: GAP — impossible in container-based backends (host-global kernel state).
+
+- family_id: PF-CLU-006
+  name: Implement a highly-available control plane (additional control-plane node, LB endpoint, etcd members)
+  modes: [create, modify]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-05}
+    ckad: null
+  reference_repositories: []
+  quarantined_topic_sources: []
+  evidence_examples: []
+  environment: 3 VMs + LB (haproxy/keepalived or static LB VM)
+  invariants: ["k8s.count control-plane nodes Ready >= 3", "node.exec etcdctl member list healthy (3)", "API reachable via LB endpoint with one CP stopped"]
+  backend: {class: vm, features: []}
+  contamination_risk: low
+  contamination_notes: GAP — no reference covers HA.
+
+- family_id: PF-CLU-007
+  name: Manage cluster certificates (inspect expiry, renew kubeadm certs, fix wrong/expired component certs)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-04}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s, cka-hand-on-lab]
+  quarantined_topic_sources: []
+  evidence_examples: [grindxhq-cka:s5-03, k16s:cka/09, cka-hand-on-lab:trb-009]
+  environment: "node access; certs with seeded near-expiry/expired state (faketime-free: generate certs with short validity at setup)"
+  invariants: ["node.exec openssl x509 -enddate > threshold for renewed certs", "k8s.condition components healthy with renewed certs", "node.exec kubeadm certs check-expiration shows no expired"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: medium
+
+- family_id: PF-CLU-008
+  name: Change control-plane configuration (apiserver flags, admission plugins, audit policy) via static manifests
+  modes: [modify]
+  profiles:
+    cka:  {domain: cluster-architecture, competency: CKA-ARC-03}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s]
+  quarantined_topic_sources: []
+  evidence_examples: [grindxhq-cka:s3-09, grindxhq-cka:s5-13]
+  environment: node access to control plane
+  invariants: ["node.file manifest contains flag", "k8s behavioural effect (e.g., admission plugin rejects object; audit log written)", "k8s.condition apiserver Ready"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: low
+  contamination_notes: grindxhq s3-09 checks the file but not the effect; KOPS checks effect.
+
+# ───────────────────────── Node & component troubleshooting (NOD) — system level ─────────────────────────
+- family_id: PF-NOD-001
+  name: Recover a NotReady node caused by kubelet failure (stopped/disabled, bad config, bad flags, bad credentials)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-01}
+    ckad: null
+  reference_repositories: [k16s, cka-hand-on-lab]
+  quarantined_topic_sources: []
+  evidence_examples: [k16s:cka/01, cka-hand-on-lab:trb-009]
+  environment: node ssh; systemd; journald
+  invariants: ["k8s.condition node Ready=True (settle)", "node.systemd kubelet active=true enabled=true (persistence)", "k8s.condition pods on node Running", "guard: node not deleted/re-registered under other name"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: medium
+  contamination_notes: grindxhq simulates NotReady with a cordon (invalid); K16S stops kubelet only. KOPS varies root cause (config path, cgroup driver, CA path, disabled unit).
+
+- family_id: PF-NOD-002
+  name: Recover from container runtime failure (containerd stopped/misconfigured, CRI socket, crictl endpoint)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-01}
+    ckad: null
+  reference_repositories: []
+  quarantined_topic_sources: []
+  evidence_examples: []
+  environment: node ssh; containerd config
+  invariants: ["node.systemd containerd active+enabled", "node.exec crictl ps succeeds", "k8s.condition node Ready and new pod schedulable there"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: low
+  contamination_notes: GAP — no reference implements a runtime failure.
+
+- family_id: PF-NOD-003
+  name: Repair a failed control-plane component (static-pod manifest error in apiserver/scheduler/controller-manager/etcd)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-02}
+    ckad: null
+  reference_repositories: [grindxhq-cka, k16s, cka-hand-on-lab]
+  quarantined_topic_sources: []
+  evidence_examples: [grindxhq-cka:s5-10, k16s:cka/04, k16s:cka2/01, cka-hand-on-lab:trb-008]
+  environment: node ssh to control plane; crictl
+  invariants: ["k8s.condition component pod Ready", "behavioural: new pod gets scheduled (scheduler) / Deployment scales (controller-manager) / API reachable (apiserver)", "node.file manifest parses and differs from fault only in the faulty field (guard vs deletion of other flags)"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: high
+  contamination_notes: '"broken scheduler manifest" is a canonical prep item; vary component, fault type (image, flag, port, volume path, certificate path) and require behavioural recovery.'
+
+- family_id: PF-NOD-004
+  name: Handle node resource pressure and eviction (disk/memory pressure, eviction thresholds)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-01}
+    ckad: null
+  reference_repositories: [ck-x]
+  quarantined_topic_sources: []
+  evidence_examples: [ck-x:cka-002/Q19]
+  environment: per-node resource isolation (not available in container backends)
+  invariants: ["k8s.condition node MemoryPressure/DiskPressure=False", "k8s.field kubelet eviction config", "workloads rescheduled/Ready"]
+  backend: {class: vm, features: []}
+  contamination_risk: low
+  contamination_notes: CK-X's version asks to create pressure (non-deterministic); DIFFICULT to make deterministic — defer.
+
+- family_id: PF-NOD-005
+  name: Recover workloads after node loss (unreachable node, pod eviction/rescheduling, node removal)
+  modes: [diagnose, repair]
+  profiles:
+    cka:  {domain: troubleshooting, competency: CKA-TRB-01}
+    ckad: null
+  reference_repositories: []
+  quarantined_topic_sources: []
+  evidence_examples: []
+  environment: kind-node (docker pause/stop of node container) or vm (instance stop)
+  invariants: ["k8s.count app ready replicas restored on remaining nodes", "k8s.exists lost node removed or cordoned as instructed", "guard: StatefulSet data preserved"]
+  backend: {class: kind-node, features: []}
+  contamination_risk: low
+  contamination_notes: GAP — no reference covers hard node failure.

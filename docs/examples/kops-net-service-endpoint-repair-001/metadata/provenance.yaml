@@ -1,0 +1,15 @@
+competency_source:
+  - {certification: CKA, curriculum_version: v1.35, domain: Troubleshooting, competency_id: CKA-TRB-05, competency: Troubleshoot services and networking}
+  - {certification: CKAD, curriculum_version: v1.35, domain: Services and Networking, competency_id: CKAD-SNW-02, competency: Provide and troubleshoot access to applications via services}
+design_references:
+  - {repository: grindxhq/cka, license: Apache-2.0, used_for: verification-pattern, notes: "idea: separate setup/validate/solution + E2E self-test; no text or code copied"}
+upstream_docs:
+  - https://kubernetes.io/docs/concepts/services-networking/service/
+  - https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/
+copied_question: false
+copied_code: []
+authoring: {method: human-original, authors: [kops-a2-team], date: "2026-09-26"}
+contamination_review:
+  reviewer: TBD
+  date: "2026-09-26"
+  checks: {no_exam_dump_source: true, no_quarantined_repo_text: true, fingerprint_scan_clean: true, max_ngram_overlap: 0.0}

@@ -1,0 +1,201 @@
+# KOPS competency model — machine-readable transcription of the PUBLIC CNCF curricula.
+#
+# This file is the single source of truth for competency identifiers used by
+# scenario.yaml (profiles.<cka|ckad>.primary_competency), the problem-family
+# catalog, and all coverage reports.
+#
+# Source (public curriculum outlines published by CNCF, licensed CC-BY 4.0+
+# per the repository README; attribution: "CKA/CKAD Curriculum v1.35,
+# Cloud Native Computing Foundation, https://github.com/cncf/curriculum"):
+#   repository : https://github.com/cncf/curriculum
+#   commit     : f6c7667265fef850daaf93b4e19e919552c67d8c (2026-03-14)
+#   CKA  file  : CKA_Curriculum_v1.35.pdf  sha256 634b793704485c2ac424a90902e0f8b28f7348a49814393434f808e3e78ec18c
+#   CKAD file  : CKAD_Curriculum_v1.35.pdf sha256 7736d2f0291239d62e9fc618304413ee9b6e53fc4580aac70bf4328203c1c210
+#   retrieved  : 2026-09-26
+#
+# Competency text is transcribed verbatim (including the curriculum's own
+# spelling, e.g. "Servicing and Networking", "API depreciations").
+# IDs are KOPS-assigned and STABLE: never renumber; when CNCF revises the
+# curriculum, add a new model version and a mapping table instead.
+#
+# KOPS does NOT combine the two profiles into a single score. Domain weights are
+# recorded only so that per-profile reports can show curriculum emphasis next
+# to measured coverage.
+
+model_version: kops-competency/v1.35-r1
+kubernetes_version: "1.35"
+
+profiles:
+  cka:
+    certification: CKA
+    title: Certified Kubernetes Administrator
+    curriculum_version: v1.35
+    domains:
+      - id: storage
+        code: STO
+        title: Storage
+        weight_pct: 10
+        competencies:
+          - id: CKA-STO-01
+            text: Implement storage classes and dynamic volume provisioning
+          - id: CKA-STO-02
+            text: Configure volume types, access modes and reclaim policies
+          - id: CKA-STO-03
+            text: Manage persistent volumes and persistent volume claims
+
+      - id: troubleshooting
+        code: TRB
+        title: Troubleshooting
+        weight_pct: 30
+        competencies:
+          - id: CKA-TRB-01
+            text: Troubleshoot clusters and nodes
+          - id: CKA-TRB-02
+            text: Troubleshoot cluster components
+          - id: CKA-TRB-03
+            text: Monitor cluster and application resource usage
+          - id: CKA-TRB-04
+            text: Manage and evaluate container output streams
+          - id: CKA-TRB-05
+            text: Troubleshoot services and networking
+
+      - id: workloads-scheduling
+        code: WLS
+        title: Workloads and Scheduling
+        weight_pct: 15
+        competencies:
+          - id: CKA-WLS-01
+            text: Understand application deployments and how to perform rolling update and rollbacks
+          - id: CKA-WLS-02
+            text: Use ConfigMaps and Secrets to configure applications
+          - id: CKA-WLS-03
+            text: Configure workload autoscaling
+          - id: CKA-WLS-04
+            text: Understand the primitives used to create robust, self-healing, application deployments
+          - id: CKA-WLS-05
+            text: Configure Pod admission and scheduling (limits, node affinity, etc.)
+
+      - id: cluster-architecture
+        code: ARC
+        title: Cluster Architecture, Installation and Configuration
+        weight_pct: 25
+        competencies:
+          - id: CKA-ARC-01
+            text: Manage role based access control (RBAC)
+          - id: CKA-ARC-02
+            text: Prepare underlying infrastructure for installing a Kubernetes cluster
+          - id: CKA-ARC-03
+            text: Create and manage Kubernetes clusters using kubeadm
+          - id: CKA-ARC-04
+            text: Manage the lifecycle of Kubernetes clusters
+          - id: CKA-ARC-05
+            text: Implement and configure a highly-available control plane
+          - id: CKA-ARC-06
+            text: Use Helm and Kustomize to install cluster components
+          - id: CKA-ARC-07
+            text: Understand extension interfaces (CNI, CSI, CRI, etc.)
+          - id: CKA-ARC-08
+            text: Understand CRDs, install and configure operators
+
+      - id: services-networking
+        code: NET
+        title: Servicing and Networking
+        weight_pct: 20
+        competencies:
+          - id: CKA-NET-01
+            text: Understand connectivity between Pods
+          - id: CKA-NET-02
+            text: Define and enforce Network Policies
+          - id: CKA-NET-03
+            text: Use ClusterIP, NodePort, LoadBalancer service types and endpoints
+          - id: CKA-NET-04
+            text: Use the Gateway API to manage Ingress traffic
+          - id: CKA-NET-05
+            text: Know how to use Ingress controllers and Ingress resources
+          - id: CKA-NET-06
+            text: Understand and use CoreDNS
+
+  ckad:
+    certification: CKAD
+    title: Certified Kubernetes Application Developer
+    curriculum_version: v1.35
+    domains:
+      - id: design-build
+        code: ADB
+        title: Application Design and Build
+        weight_pct: 20
+        competencies:
+          - id: CKAD-ADB-01
+            text: Define, build and modify container images
+          - id: CKAD-ADB-02
+            text: Choose and use the right workload resource (Deployment, DaemonSet, CronJob, etc.)
+          - id: CKAD-ADB-03
+            text: Understand multi-container Pod design patterns (e.g. sidecar, init and others)
+          - id: CKAD-ADB-04
+            text: Utilize persistent and ephemeral volumes
+
+      - id: deployment
+        code: ADP
+        title: Application Deployment
+        weight_pct: 20
+        competencies:
+          - id: CKAD-ADP-01
+            text: Use Kubernetes primitives to implement common deployment strategies (e.g. blue/green or canary)
+          - id: CKAD-ADP-02
+            text: Understand Deployments and how to perform rolling updates
+          - id: CKAD-ADP-03
+            text: Use the Helm package manager to deploy existing packages
+          - id: CKAD-ADP-04
+            text: Kustomize
+
+      - id: observability-maintenance
+        code: AOM
+        title: Application Observability and Maintenance
+        weight_pct: 15
+        competencies:
+          - id: CKAD-AOM-01
+            text: Understand API depreciations
+          - id: CKAD-AOM-02
+            text: Implement probes and health checks
+          - id: CKAD-AOM-03
+            text: Use built-in CLI tools to monitor Kubernetes applications
+          - id: CKAD-AOM-04
+            text: Utilize container logs
+          - id: CKAD-AOM-05
+            text: Debugging in Kubernetes
+
+      - id: environment-config-security
+        code: AEC
+        title: Application Environment, Configuration and Security
+        weight_pct: 25
+        competencies:
+          - id: CKAD-AEC-01
+            text: Discover and use resources that extend Kubernetes (CRD, Operators)
+          - id: CKAD-AEC-02
+            text: Understand authentication, authorization and admission control
+          - id: CKAD-AEC-03
+            text: Understand requests, limits, quotas
+          - id: CKAD-AEC-04
+            text: Define resource requirements
+          - id: CKAD-AEC-05
+            text: Understand ConfigMaps
+          - id: CKAD-AEC-06
+            text: Create & consume Secrets
+          - id: CKAD-AEC-07
+            text: Understand ServiceAccounts
+          - id: CKAD-AEC-08
+            text: Understand Application Security (SecurityContexts, Capabilities, etc.)
+
+      - id: services-networking
+        code: SNW
+        title: Services and Networking
+        weight_pct: 20
+        competencies:
+          - id: CKAD-SNW-01
+            text: Demonstrate basic understanding of NetworkPolicies
+          - id: CKAD-SNW-02
+            text: Provide and troubleshoot access to applications via services
+          - id: CKAD-SNW-03
+            text: Use Ingress rules to expose applications
+
+# Totals: CKA 27 competencies / 5 domains; CKAD 24 competencies / 5 domains.

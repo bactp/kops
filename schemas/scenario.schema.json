@@ -1,0 +1,1108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kops.local/schemas/scenario.schema.json",
+  "title": "KOPS Scenario",
+  "description": "Canonical definition of one executable KOPS scenario (scenario.yaml). Status: PROPOSED v1alpha1 \u2014 frozen only after architecture review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "id",
+    "revision",
+    "title",
+    "status",
+    "profiles",
+    "backend",
+    "task",
+    "interfaces",
+    "initial_state",
+    "constraints",
+    "budgets",
+    "expected_invariants",
+    "setup",
+    "verification",
+    "reset",
+    "reference",
+    "metadata"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "kops/v1alpha1"
+    },
+    "kind": {
+      "const": "Scenario"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^(cka|ckad|kops)-[a-z0-9]+(-[a-z0-9]+)*-[0-9]{3}$",
+      "maxLength": 80,
+      "description": "Stable, globally unique id. Never reused after retirement. Prefix = profile that owns authorship (kops- for neutral)."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Incremented on ANY change affecting agent-visible text, initial state, or verifier semantics. Results are only comparable within the same (id, revision)."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 120
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "validated",
+        "frozen",
+        "retired"
+      ],
+      "description": "validated = passed benchmark self-test; frozen = part of a released benchmark version (immutable)."
+    },
+    "family_id": {
+      "type": "string",
+      "pattern": "^PF-[A-Z]{3}-[0-9]{3}$",
+      "description": "Problem family from docs/problem-family-catalog.yaml."
+    },
+    "difficulty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ],
+      "properties": {
+        "level": {
+          "enum": [
+            1,
+            2,
+            3
+          ],
+          "description": "1=single-step, 2=multi-step/diagnosis, 3=multi-component diagnosis or system-level"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]+$"
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cka",
+        "ckad"
+      ],
+      "description": "Each profile is scored independently. There is no combined score.",
+      "properties": {
+        "cka": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "domain": {
+              "type": "string"
+            },
+            "primary_competency": {
+              "type": "string"
+            },
+            "secondary_competencies": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^CKA-[A-Z]{3}-[0-9]{2}$"
+              },
+              "description": "Informational only. Never used for scoring or coverage counting."
+            },
+            "mapping_rationale": {
+              "type": "string",
+              "minLength": 10,
+              "description": "Why this competency is THE primary one (reviewed during scenario acceptance)."
+            }
+          },
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "domain",
+              "primary_competency",
+              "mapping_rationale"
+            ],
+            "oneOf": [
+              {
+                "properties": {
+                  "domain": {
+                    "const": "storage"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKA-STO-01",
+                      "CKA-STO-02",
+                      "CKA-STO-03"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "domain": {
+                    "const": "troubleshooting"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKA-TRB-01",
+                      "CKA-TRB-02",
+                      "CKA-TRB-03",
+                      "CKA-TRB-04",
+                      "CKA-TRB-05"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "domain": {
+                    "const": "workloads-scheduling"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKA-WLS-01",
+                      "CKA-WLS-02",
+                      "CKA-WLS-03",
+                      "CKA-WLS-04",
+                      "CKA-WLS-05"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "domain": {
+                    "const": "cluster-architecture"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKA-ARC-01",
+                      "CKA-ARC-02",
+                      "CKA-ARC-03",
+                      "CKA-ARC-04",
+                      "CKA-ARC-05",
+                      "CKA-ARC-06",
+                      "CKA-ARC-07",
+                      "CKA-ARC-08"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "domain": {
+                    "const": "services-networking"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKA-NET-01",
+                      "CKA-NET-02",
+                      "CKA-NET-03",
+                      "CKA-NET-04",
+                      "CKA-NET-05",
+                      "CKA-NET-06"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "domain"
+                  ]
+                },
+                {
+                  "required": [
+                    "primary_competency"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "ckad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "domain": {
+              "type": "string"
+            },
+            "primary_competency": {
+              "type": "string"
+            },
+            "secondary_competencies": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^CKAD-[A-Z]{3}-[0-9]{2}$"
+              },
+              "description": "Informational only. Never used for scoring or coverage counting."
+            },
+            "mapping_rationale": {
+              "type": "string",
+              "minLength": 10,
+              "description": "Why this competency is THE primary one (reviewed during scenario acceptance)."
+            }
+          },
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "domain",
+              "primary_competency",
+              "mapping_rationale"
+            ],
+            "oneOf": [
+              {
+                "properties": {
+                  "domain": {
+                    "const": "design-build"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKAD-ADB-01",
+                      "CKAD-ADB-02",
+                      "CKAD-ADB-03",
+                      "CKAD-ADB-04"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "domain": {
+                    "const": "deployment"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKAD-ADP-01",
+                      "CKAD-ADP-02",
+                      "CKAD-ADP-03",
+                      "CKAD-ADP-04"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "domain": {
+                    "const": "observability-maintenance"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKAD-AOM-01",
+                      "CKAD-AOM-02",
+                      "CKAD-AOM-03",
+                      "CKAD-AOM-04",
+                      "CKAD-AOM-05"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "domain": {
+                    "const": "environment-config-security"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKAD-AEC-01",
+                      "CKAD-AEC-02",
+                      "CKAD-AEC-03",
+                      "CKAD-AEC-04",
+                      "CKAD-AEC-05",
+                      "CKAD-AEC-06",
+                      "CKAD-AEC-07",
+                      "CKAD-AEC-08"
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "domain": {
+                    "const": "services-networking"
+                  },
+                  "primary_competency": {
+                    "enum": [
+                      "CKAD-SNW-01",
+                      "CKAD-SNW-02",
+                      "CKAD-SNW-03"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "domain"
+                  ]
+                },
+                {
+                  "required": [
+                    "primary_competency"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "cka": {
+              "properties": {
+                "enabled": {
+                  "const": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "ckad": {
+              "properties": {
+                "enabled": {
+                  "const": true
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class",
+        "kubernetes_version",
+        "topology",
+        "isolation"
+      ],
+      "properties": {
+        "class": {
+          "enum": [
+            "kind",
+            "kind-node",
+            "vm"
+          ],
+          "description": "kind = object-level API access only; kind-node = kind + node exec (systemd/kubelet/containerd/static pods/etcd inside node containers); vm = full Linux VMs (kubeadm lifecycle, kernel/OS prep, HA)."
+        },
+        "kubernetes_version": {
+          "type": "string",
+          "pattern": "^1\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "topology": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "control_planes",
+            "workers"
+          ],
+          "properties": {
+            "control_planes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            },
+            "workers": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            }
+          }
+        },
+        "features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "networkpolicy",
+              "metrics-server",
+              "default-storageclass",
+              "gateway-api",
+              "ingress-controller",
+              "loadbalancer",
+              "audit-log",
+              "helm-repo-mirror",
+              "image-registry",
+              "multi-cluster"
+            ]
+          },
+          "description": "Cluster add-ons that the backend profile must provide BEFORE setup runs."
+        },
+        "isolation": {
+          "enum": [
+            "cluster",
+            "namespace"
+          ],
+          "description": "cluster = fresh cluster (or snapshot restore) per trial; namespace = shared cluster, scenario touches only its declared namespaces (must be proven by reset self-test)."
+        },
+        "namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+          },
+          "description": "Namespaces the scenario owns. Required when isolation=namespace."
+        }
+      },
+      "if": {
+        "properties": {
+          "isolation": {
+            "const": "namespace"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "namespaces"
+        ]
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "statement_file"
+      ],
+      "properties": {
+        "statement_file": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$",
+          "description": "Agent-visible markdown (normally task.md). The ONLY scenario text shown to the agent."
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Seeded variant parameters substituted into task.md, fixtures, setup, criteria and solution as {{name}}. The per-trial seed is recorded in results.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "string",
+                  "integer",
+                  "choice",
+                  "dns-label",
+                  "port"
+                ]
+              },
+              "default": {},
+              "choices": {
+                "type": "array",
+                "minItems": 1
+              },
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              },
+              "prefix": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "agent_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Environment facts presented to the agent alongside task.md (identical format for every agent).",
+          "properties": {
+            "kube_context": {
+              "type": "string"
+            },
+            "default_namespace": {
+              "type": "string"
+            },
+            "nodes_accessible": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "working_directory": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "interfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed",
+        "agent_identity"
+      ],
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "kubectl",
+              "kubernetes-api",
+              "kubernetes-mcp",
+              "shell",
+              "file-read",
+              "file-write",
+              "helm",
+              "kustomize",
+              "ssh",
+              "systemctl",
+              "journalctl",
+              "crictl",
+              "etcdctl",
+              "etcdutl",
+              "kubeadm",
+              "openssl",
+              "podman",
+              "curl",
+              "internet"
+            ]
+          }
+        },
+        "forbidden": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "kubectl",
+              "kubernetes-api",
+              "kubernetes-mcp",
+              "shell",
+              "file-read",
+              "file-write",
+              "helm",
+              "kustomize",
+              "ssh",
+              "systemctl",
+              "journalctl",
+              "crictl",
+              "etcdctl",
+              "etcdutl",
+              "kubeadm",
+              "openssl",
+              "podman",
+              "curl",
+              "internet"
+            ]
+          }
+        },
+        "agent_identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "cluster-admin",
+                "namespace-admin",
+                "custom-rbac"
+              ],
+              "description": "Kubernetes identity bound to the agent's kubeconfig. Distinct from the verifier identity; recorded in the audit log."
+            },
+            "rbac_file": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+            }
+          },
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "custom-rbac"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "rbac_file"
+            ]
+          }
+        },
+        "node_access": {
+          "enum": [
+            "none",
+            "ssh",
+            "exec"
+          ],
+          "description": "How the agent reaches nodes (kind-node/vm backends). 'none' for kind."
+        }
+      }
+    },
+    "initial_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description"
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Hidden, author-facing description of the prepared state."
+        },
+        "fixtures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+          }
+        },
+        "faults": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "category",
+              "description"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]+$"
+              },
+              "category": {
+                "enum": [
+                  "none",
+                  "missing-resource",
+                  "misconfiguration",
+                  "wrong-reference",
+                  "resource-exhaustion",
+                  "scheduling-constraint",
+                  "permission",
+                  "component-stopped",
+                  "component-misconfigured",
+                  "file-corruption",
+                  "network-policy",
+                  "image",
+                  "certificate",
+                  "data-loss-risk"
+                ]
+              },
+              "layer": {
+                "enum": [
+                  "object",
+                  "control-plane",
+                  "node",
+                  "network",
+                  "storage"
+                ]
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "description": "Rules the agent must respect. Each MUST be enforced by RBAC/tooling or checked by a guard invariant.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "description",
+          "enforced_by"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "description": {
+            "type": "string"
+          },
+          "agent_visible": {
+            "type": "boolean",
+            "default": true
+          },
+          "enforced_by": {
+            "enum": [
+              "rbac",
+              "tooling",
+              "invariant"
+            ]
+          },
+          "invariant": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          }
+        },
+        "if": {
+          "properties": {
+            "enforced_by": {
+              "const": "invariant"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "invariant"
+          ]
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_steps",
+        "max_wall_seconds",
+        "per_action_timeout_seconds"
+      ],
+      "description": "Scenario defaults. An experiment may override globally, but must apply the same override to every agent.",
+      "properties": {
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "max_wall_seconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 7200
+        },
+        "per_action_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 900
+        },
+        "max_output_bytes_per_action": {
+          "type": "integer",
+          "minimum": 1024,
+          "default": 65536
+        }
+      }
+    },
+    "expected_invariants": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Human-readable contract. Each invariant is implemented by >=1 criterion in verification.criteria_file (checked by the linter).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "required",
+          "description"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "kind": {
+            "enum": [
+              "goal",
+              "guard"
+            ],
+            "description": "goal = desired end state; guard = must remain unchanged/not violated (collateral-damage and anti-shortcut checks)."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "PASS requires every required invariant to hold. Non-required invariants are diagnostic only."
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "contains": {
+        "properties": {
+          "kind": {
+            "const": "goal"
+          },
+          "required": {
+            "const": true
+          }
+        }
+      }
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "script",
+        "timeout_seconds",
+        "confirm"
+      ],
+      "properties": {
+        "script": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 1800
+        },
+        "executes_on": {
+          "enum": [
+            "runner",
+            "control-plane",
+            "all-nodes"
+          ],
+          "default": "runner"
+        },
+        "confirm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "must_fail"
+          ],
+          "description": "Negative control executed after setup and before the agent starts.",
+          "properties": {
+            "must_fail": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]+$"
+              },
+              "description": "Goal invariant ids that MUST evaluate to fail on the prepared state (proves the task is non-trivial and the fault was injected)."
+            },
+            "must_pass": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]+$"
+              },
+              "description": "Invariants (typically guards/preconditions) that MUST hold on the prepared state."
+            }
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "criteria_file",
+        "entrypoint",
+        "pass_rule",
+        "timeout_seconds"
+      ],
+      "properties": {
+        "engine": {
+          "const": "kops-verifier/v1"
+        },
+        "criteria_file": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+        },
+        "entrypoint": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$",
+          "description": "verify/verify.sh \u2014 thin wrapper so the verifier can be run standalone by humans."
+        },
+        "pass_rule": {
+          "const": "all-required",
+          "description": "PASS iff every required invariant has status=pass. Any criterion status=error makes the trial INVALID (infrastructure fault), never PASS or FAIL."
+        },
+        "settle": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_wait_seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 600
+            },
+            "poll_interval_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30
+            }
+          },
+          "description": "Bounded convergence window: eventually-consistent criteria are polled until pass or deadline."
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 1800
+        },
+        "credentials": {
+          "const": "verifier-admin",
+          "description": "Verifier never uses the agent's identity or workstation."
+        }
+      }
+    },
+    "reset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy",
+        "verify_baseline"
+      ],
+      "properties": {
+        "strategy": {
+          "enum": [
+            "destroy-cluster",
+            "snapshot-restore",
+            "namespace-delete",
+            "script"
+          ]
+        },
+        "script": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+        },
+        "verify_baseline": {
+          "type": "boolean",
+          "description": "After reset, runner compares a state digest with the pre-setup baseline; mismatch quarantines the backend instance."
+        }
+      },
+      "if": {
+        "properties": {
+          "strategy": {
+            "const": "script"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "script"
+        ]
+      }
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "solution",
+        "exposure"
+      ],
+      "properties": {
+        "solution": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+        },
+        "exposure": {
+          "const": "hidden",
+          "description": "Reference material is never mounted into the agent workstation nor included in prompts."
+        },
+        "negative_solutions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+          },
+          "description": "Optional plausible-but-wrong solutions; self-test asserts each yields FAIL (verifier mutation testing)."
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kubernetes_version",
+        "authors",
+        "created",
+        "provenance"
+      ],
+      "properties": {
+        "kubernetes_version": {
+          "type": "string",
+          "pattern": "^1\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "competency_model": {
+          "type": "string",
+          "default": "kops-competency/v1.35-r1"
+        },
+        "authors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "created": {
+          "type": "string",
+          "format": "date"
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "copied_question",
+            "authored_clean_room"
+          ],
+          "properties": {
+            "file": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$",
+              "description": "metadata/provenance.yaml (validated by provenance.schema.json)."
+            },
+            "copied_question": {
+              "const": false
+            },
+            "authored_clean_room": {
+              "const": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

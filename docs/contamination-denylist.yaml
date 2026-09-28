@@ -1,0 +1,67 @@
+# KOPS contamination denylist (seed version) — consumed by the scenario lint
+# (tools/contamination-scan, to be implemented). Tokens only; no question text.
+#
+# Sources: audit notes docs/references/ckad-dojo.md §11, ckad-2026.md §11,
+# p1-repositories.md (ckad-exercises canary list). Compiled 2026-09-26.
+#
+# Semantics
+#   scope: where to scan — task (task.md), fixtures, criteria, setup, solution, all
+#   match: literal | regex | namespace-context (only when used as a namespace:
+#          "namespace: <t>", "-n <t>", "--namespace <t>", "ns/<t>")
+#          | resource-name-context (metadata.name / kubectl <verb> <kind> <t>)
+#   action: fail (lint error) | warn (reviewer must justify in provenance.yaml)
+
+version: denylist-v0.1
+
+rules:
+  # ── killer.sh simulator fingerprints (via ckad-dojo audit) ─────────────
+  - {id: ks-path-course,   scope: all,  match: literal, action: fail, tokens: ["/opt/course", "exam/course"]}
+  - {id: ks-vendor,        scope: all,  match: literal, action: fail, tokens: ["killer.sh", "killer-shell", "killercoda", "CKAD Simulator Kubernetes", "CKA Simulator Kubernetes", "candidate@terminal"]}
+  - {id: ks-adapt-table,   scope: all,  match: literal, action: fail, tokens: ["Local Simulator Adaptations", "SSH to different instances"]}
+  - {id: ks-namespaces,    scope: all,  match: namespace-context, action: fail,
+     tokens: [neptune, saturn, pluto, mercury, jupiter, venus, mars, earth, moon, sun, shell-intern]}
+  - {id: ks-entities,      scope: all,  match: literal, action: fail,
+     tokens: [holy-api, pod1-status-command, neb-new-job, webserver-sat-003, api-new-c32, pvc-126-reason, sun-cipher, web-moon, jupiter-crew, project-23-api, internal-issue-report, project-plt-6cc]}
+
+  # ── code-provenance idioms of quarantined repos (ckad-dojo, ckad-2026) ──
+  - {id: q-code-idioms,    scope: [setup, criteria, solution], match: literal, action: fail,
+     tokens: ["check_criterion", "score_preview_q", "DETAILS:", "resource_exists", "print_score", "((score++))"]}
+  - {id: q-layout,         scope: all, match: regex, action: fail,
+     tokens: ['^Q[0-9]{2} - ', '\bq[0-9]{2}\b']}   # second only in namespace context (reviewer)
+
+  # ── ckad-exercises memorized surface forms (MIT, but high memorization) ──
+  - {id: ex-namespaces,    scope: all, match: namespace-context, action: fail,
+     tokens: [mynamespace, myns, limitrange, secret-ops]}
+  - {id: ex-resource-names, scope: all, match: resource-name-context, action: fail,
+     tokens: [nginx1, nginx2, nginx3, busybox2, my-app-svc, pi, private-reg, private-reg-container,
+              myrq, anotherone, cmvolume, mysecret, mysecret2, ext-service-secret, myuser,
+              myvolume, mypvc, operator-sample, chart-test, myvalues, mynode]}
+  - {id: ex-literals,      scope: all, match: literal, action: warn,
+     tokens: [lala, lolo, "app=v1", "app=v2", "owner=marketing", "accelerator=nvidia-tesla-p100", operators.stable.example.com]}
+
+  # ── generic over-used forms (warn: reviewer must show the scenario is not a memorized template) ──
+  - {id: generic-canon,    scope: task, match: regex, action: warn,
+     tokens: ['nginx:latest', 'image: nginx\b', 'busybox.*sleep 3600', '\bperl\b.*bpi']}
+
+# n-gram / sequence similarity (implemented by the scan tool, not token rules):
+similarity:
+  quarantine_corpus:
+    - {repo: ckad-dojo, commit: b6686223aa9a7d8df57edefa00cc85d715a22b70, paths: ["exams/**", "manifests/**", "templates/**", "scripts/lib/scoring-functions.sh"], history_commits: [ce200ed, 5646e61, fd42ecc, 6b7ec28]}
+    - {repo: ckad-2026, commit: 9d66dd80e3fc98e3786fafecab9514ecd1794fd2, paths: ["Q0[1-9] - */**", "Q1[0-6] - */**"]}
+  comparison_corpus:          # public, legitimately licensed, but memorized/overlapping; similarity => warn
+    - {repo: ckad-exercises, commit: d7b9a5c28b2ff2d8a8fab5524569956f21aaa1b4}
+    - {repo: grindxhq-cka,   commit: ea74cdb1bd52097ecbc1c31894cf6958532de7e5}
+    - {repo: ck-x,           commit: 76a78943556af64a774a1c22b283efc22906ff1c}
+    - {repo: k16s,           commit: 08f0ba1d9af1c09a1bb73050c0c2f2486aec7f8d}
+    - {repo: cka-hand-on-lab, commit: 6818f52d02b3302fb5ce797de25991ef2f9caec9}
+    - {repo: ckad-exams,     commit: c2bf3c84e9aee51a1619c9c60f3b7bd535445785}
+    - {repo: ckad-2026,      commit: 9d66dd80e3fc98e3786fafecab9514ecd1794fd2, paths: ["Q1[7-9] - */**", "Q[2-7][0-9] - */**"]}
+  ngram: 8                     # word 8-grams after normalization (lowercase, strip names/numbers)
+  thresholds: {quarantine_fail: 0.05, comparison_warn: 0.15}
+  # The scan runs on KOPS-owned files only; the corpus is read from references/ (read-only).
+
+# Scan scope: KOPS-owned scenario content only (scenarios/**, workstation/**, backends/** fixtures).
+# docs/ is excluded: audit notes and this file legitimately name fingerprints in order to detect them.
+scan_paths:
+  include: ["scenarios/**", "workstation/**", "backends/**/fixtures/**"]
+  exclude: ["docs/**"]
