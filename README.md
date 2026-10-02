@@ -24,6 +24,11 @@ uv venv --python 3.12 .venv && uv pip install -e ".[dev]"   # kind + kubectl 1.3
 .venv/bin/kops lint kops-net-service-endpoint-repair-001
 .venv/bin/kops selftest kops-net-service-endpoint-repair-001
 .venv/bin/kops run experiments/phase1-baselines.yaml
+
+# take the task yourself:
+.venv/bin/kops lab up kops-net-service-endpoint-repair-001      # prints the task + env vars
+.venv/bin/kops lab verify kops-net-service-endpoint-repair-001  # grade your work (re-runnable)
+.venv/bin/kops lab down kops-net-service-endpoint-repair-001
 ```
 
 ## Principles (frozen)

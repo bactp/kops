@@ -16,6 +16,9 @@ def main(argv=None) -> int:
     s.add_argument("--seed", type=int, default=1); s.add_argument("--repeats", type=int, default=3)
     s.add_argument("--jobs", type=int, default=3)
     s = sub.add_parser("run"); s.add_argument("experiment"); s.add_argument("--jobs", type=int, default=2)
+    s = sub.add_parser("lab"); s.add_argument("action", choices=["up", "verify", "down", "task"])
+    s.add_argument("scenario"); s.add_argument("--seed", type=int, default=1)
+    s.add_argument("--wait", action="store_true", help="verify: poll up to the scenario settle time")
     s = sub.add_parser("compare"); s.add_argument("results_dir")
     a = ap.parse_args(argv)
 
@@ -43,6 +46,18 @@ def main(argv=None) -> int:
         from .experiment import compare, run_experiment
         out = run_experiment(Path(a.experiment), a.jobs)
         print(compare(out))
+        return 0
+    if a.cmd == "lab":
+        from . import lab
+        if a.action == "up":
+            print(lab.up(sdir(a.scenario), a.seed))
+            return 0
+        if a.action == "verify":
+            return lab.verify(sdir(a.scenario), a.wait)
+        if a.action == "task":
+            print(lab.task(sdir(a.scenario)))
+            return 0
+        lab.down(sdir(a.scenario))
         return 0
     if a.cmd == "compare":
         from .experiment import compare

@@ -220,3 +220,31 @@ def test_outcome_all_required():
 def test_scenario_lints_clean():
     from kops.lint import lint_scenario
     assert lint_scenario(S03) == []
+
+
+def test_settle_uses_one_shared_deadline_not_one_per_criterion():
+    import time
+    fc = FakeCluster({"-n n get deployment d": {"spec": {"x": 1}}})
+    crit_ = lambda i: {"id": i, "invariant": i, "required": True, "settle": True,
+                       "check": {"type": "k8s.field", "resource": {"kind": "Deployment", "name": "d", "namespace": "n"},
+                                 "path": ".spec.x", "value": 2}}
+    v = Verifier(fc, [crit_("a"), crit_("b")], {"max_wait_seconds": 1, "poll_interval_seconds": 0.2})
+    t0 = time.monotonic()
+    res = v.evaluate()
+    assert time.monotonic() - t0 < 1.8          # was ~2.0 with a per-criterion deadline
+    assert [r.status for r in res] == [FAIL, FAIL] and all(r.attempts > 1 for r in res)
+    t0 = time.monotonic()
+    v.evaluate(settle=False)
+    assert time.monotonic() - t0 < 0.3
+
+
+def test_settle_returns_as_soon_as_everything_passes():
+    import time
+    obj = {"spec": {"x": 1}}
+    fc = FakeCluster({"-n n get deployment d": obj})
+    c = {"id": "a", "invariant": "a", "required": True, "settle": True,
+         "check": {"type": "k8s.field", "resource": {"kind": "Deployment", "name": "d", "namespace": "n"},
+                   "path": ".spec.x", "value": 1}}
+    t0 = time.monotonic()
+    assert Verifier(fc, [c], {"max_wait_seconds": 30, "poll_interval_seconds": 1}).evaluate()[0].status == PASS
+    assert time.monotonic() - t0 < 0.5

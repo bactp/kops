@@ -169,21 +169,27 @@ class Verifier:
 
     def evaluate(self, only_invariants: list[str] | None = None, *, settle: bool = True
                  ) -> list[CriterionResult]:
-        out = []
-        for c in self.criteria:
-            if only_invariants is not None and c["invariant"] not in only_invariants:
-                continue
-            deadline = time.monotonic() + (self.settle["max_wait_seconds"] if settle and c.get("settle") else 0)
-            attempts = 0
-            while True:
-                attempts += 1
-                st, ev = self._once(c)
-                if st != FAIL or time.monotonic() >= deadline:
-                    break
-                time.sleep(self.settle["poll_interval_seconds"])
-            out.append(CriterionResult(c["id"], c["invariant"], c.get("required", True),
-                                       st, ev, attempts, c.get("failure_class")))
-        return out
+        """Evaluate criteria. Criteria marked `settle` are re-polled together until they all
+        pass or one shared deadline (verification.settle.max_wait_seconds) expires."""
+        crits = [c for c in self.criteria
+                 if only_invariants is None or c["invariant"] in only_invariants]
+        done: dict[str, tuple[str, str]] = {}
+        attempts = {c["id"]: 0 for c in crits}
+        pending = crits
+        deadline = time.monotonic() + (self.settle["max_wait_seconds"] if settle else 0)
+        while True:
+            retry = []
+            for c in pending:
+                attempts[c["id"]] += 1
+                done[c["id"]] = self._once(c)
+                if done[c["id"]][0] == FAIL and settle and c.get("settle"):
+                    retry.append(c)
+            pending = retry
+            if not pending or time.monotonic() >= deadline:
+                break
+            time.sleep(self.settle["poll_interval_seconds"])
+        return [CriterionResult(c["id"], c["invariant"], c.get("required", True), *done[c["id"]],
+                                attempts[c["id"]], c.get("failure_class")) for c in crits]
 
     @staticmethod
     def outcome(results: list[CriterionResult]) -> str:

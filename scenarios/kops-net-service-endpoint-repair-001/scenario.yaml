@@ -36,7 +36,6 @@ task:
     app:  {type: choice, choices: [catalog, basket, checkout]}
     port: {type: port, min: 8000, max: 8999}
   agent_context:
-    kube_context: kops
     default_namespace: "{{ns}}"
 
 interfaces:
