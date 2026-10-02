@@ -197,6 +197,8 @@ Profile reports state the **denominator per backend class**, e.g. "CKA Troublesh
 
 ## 7. Decisions requested
 
+> **Review status (2026-09-28, see [decision-log.md](decision-log.md)):** D-1 approved (B1 for the slice). D-2 **deferred**: B2 is not built now, spike S-2 is not scheduled, and `vm` families are reported as "uncovered: backend deferred". D-3 approved (single dual-mode controller, chosen in S-1). D-4 approved (decided by S-1 measurement). D-5 approved (pin 1.35).
+
 | ID | Decision | Options | Recommendation |
 |---|---|---|---|
 | D-1 | Is B1 (`kind-node`) acceptable as "system-level" for the vertical slice? | (a) yes, B2 later; (b) build B2 before any system scenario | **(a)**. B1 covers the most common CKA node and component troubleshooting at kind cost. B2 is only needed for upgrade, OS prep, HA and reboot. |

@@ -9,7 +9,7 @@ Machine-readable schemas:
 | [`../schemas/criteria.schema.json`](../schemas/criteria.schema.json) | `verify/criteria.yaml` | Typed, deterministic check primitives. |
 | [`../schemas/provenance.schema.json`](../schemas/provenance.schema.json) | `metadata/provenance.yaml` | Clean-room record. `copied_question` is `const: false`. |
 
-Worked, validated example: [`examples/kops-net-service-endpoint-repair-001/`](examples/kops-net-service-endpoint-repair-001/).
+Worked, validated example: [`../scenarios/kops-net-service-endpoint-repair-001/`](../scenarios/kops-net-service-endpoint-repair-001/).
 
 > **Change vs. the brief.** The brief asked only for `scenario.schema.json`. I split it into three schemas because the criteria and provenance files have different reviewers and life-cycles: the verifier engine owns criteria, and the contamination review owns provenance. Each can then be validated and version-bumped independently. `scenario.yaml` keeps a summary of both (`expected_invariants`, `metadata.provenance`) so that a reader of one file still sees the contract.
 

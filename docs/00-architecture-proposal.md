@@ -21,7 +21,7 @@
 | C | Problem-family catalog | [problem-family-catalog.yaml](problem-family-catalog.yaml), [competency-model.yaml](competency-model.yaml), [cka-ckad-coverage-matrix.md](cka-ckad-coverage-matrix.md) |
 | D | Coverage-gap matrix | [coverage-gap-analysis.md](coverage-gap-analysis.md), [cka-ckad-coverage-matrix.md](cka-ckad-coverage-matrix.md) |
 | E | License / contamination risk matrix | [license-contamination-risk.md](license-contamination-risk.md), [contamination-denylist.yaml](contamination-denylist.yaml) |
-| F | Proposed scenario schema | [scenario-schema.md](scenario-schema.md), [../schemas/](../schemas/) (scenario, criteria, provenance), [examples/](examples/kops-net-service-endpoint-repair-001/) |
+| F | Proposed scenario schema | [scenario-schema.md](scenario-schema.md), [../schemas/](../schemas/) (scenario, criteria, provenance), [examples/](../scenarios/kops-net-service-endpoint-repair-001/) |
 | G | Environment backend architecture | [backend-design.md](backend-design.md) |
 | H | Runtime architecture | [runtime-architecture.md](runtime-architecture.md) |
 | I | Initial vertical slice (10 + 2 stretch) | [vertical-slice.md](vertical-slice.md) |
@@ -164,6 +164,8 @@ Registry → Loader → Backend Provisioner → Setup+Confirm → Agent Interfac
 ## Decisions requested from the reviewer
 
 Every decision point below lists the options, the trade-off, a recommendation and the reason. Details are in the linked documents.
+
+> **Review status (2026-09-28, see [decision-log.md](decision-log.md)):** #1 approved · #2 **deferred** (B2 later) · #3 approved · #4 approved · #5 approved · #6–#16 open.
 
 | # | Decision | Options | Recommendation | Why | Doc |
 |---|---|---|---|---|---|
