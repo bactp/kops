@@ -26,9 +26,8 @@ backend:
   class: kind
   kubernetes_version: "1.35"
   topology: {control_planes: 1, workers: 2}
-  features: [audit-log]
-  isolation: namespace
-  namespaces: ["{{ns}}"]
+  features: []
+  isolation: cluster
 
 task:
   statement_file: task.md
@@ -41,8 +40,8 @@ task:
     default_namespace: "{{ns}}"
 
 interfaces:
-  allowed: [kubectl, shell, file-read, file-write]
-  forbidden: [internet, ssh]
+  allowed: [kubectl]
+  forbidden: [shell, file-write, internet, ssh]
   agent_identity: {kind: cluster-admin}
   node_access: none
 
@@ -69,6 +68,7 @@ budgets:
   max_steps: 30
   max_wall_seconds: 900
   per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
 
 expected_invariants:
   - {id: endpoints_ready, kind: goal, required: true, description: Service has 3 ready endpoints on the container port}
@@ -94,7 +94,7 @@ verification:
   credentials: verifier-admin
 
 reset:
-  strategy: namespace-delete
+  strategy: destroy-cluster
   verify_baseline: true
 
 reference:

@@ -1,0 +1,13 @@
+# Fill in the two model endpoints, then: kops run experiments/phase1-models.yaml
+# Both agents use the SAME harness (shell-loop, prompt p1); only the model differs.
+name: phase1-models
+scenarios: [kops-net-service-endpoint-repair-001]
+seeds: [1]
+trials: 3
+agents:
+  - name: frontier-shell-loop
+    kind: model
+    model: {id: FRONTIER_MODEL_ID, base_url: https://FRONTIER_HOST/v1, api_key_env: FRONTIER_API_KEY, temperature: 0.0}
+  - name: local-shell-loop
+    kind: model
+    model: {id: LOCAL_MODEL_ID, base_url: http://localhost:11434/v1, temperature: 0.0}

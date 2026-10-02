@@ -11,11 +11,20 @@ Scenario → initial state / injected fault → agent observes and acts (via Too
 
 ## Status
 
-**Phase: architecture proposal, awaiting review.** No runtime code or scenarios exist yet, by design.
+**Phase 1 (pipeline proof) is implemented for one scenario.** Everything else is still a design.
 
-- Start here: [`docs/00-architecture-proposal.md`](docs/00-architecture-proposal.md). It summarizes deliverables A–J and lists the decisions requested.
-- Schemas (proposed `kops/v1alpha1`): [`schemas/`](schemas/)
-- Worked scenario example (schema-validated, not executable yet): [`docs/examples/`](docs/examples/)
+- Runs today: `kind` backend (one fresh cluster per trial, private kubeconfig), kubectl-only Tool Gateway, shell-loop agent over any OpenAI-compatible endpoint, null and oracle agents, a declarative verifier (5 check types), `selftest`, trial records and a comparison table.
+- Scenario available: `kops-net-service-endpoint-repair-001` (CKA Troubleshooting / CKAD Services & Networking).
+- Not built yet: workstation container, `kind-node` and `vm` backends, docs mirror, multi-context tasks, held-out split, contamination scanner, scoring beyond PASS/FAIL. See [`docs/design-review.md`](docs/design-review.md).
+- Design entry point: [`docs/00-architecture-proposal.md`](docs/00-architecture-proposal.md). Decisions: [`docs/decision-log.md`](docs/decision-log.md).
+- Schemas (proposed `kops/v1alpha1`): [`schemas/`](schemas/). Scenarios: [`scenarios/`](scenarios/)
+
+```bash
+uv venv --python 3.12 .venv && uv pip install -e ".[dev]"   # kind + kubectl 1.35 must be in ~/.local/share/kops/bin
+.venv/bin/kops lint kops-net-service-endpoint-repair-001
+.venv/bin/kops selftest kops-net-service-endpoint-repair-001
+.venv/bin/kops run experiments/phase1-baselines.yaml
+```
 
 ## Principles (frozen)
 

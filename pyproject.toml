@@ -1,0 +1,23 @@
+[project]
+name = "kops"
+version = "0.0.1"
+description = "KOPS Track A2: executable CKA/CKAD benchmark environment for AI agents"
+requires-python = ">=3.11"
+dependencies = ["pyyaml>=6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "jsonschema>=4.20"]
+
+[project.scripts]
+kops = "kops.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kops"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["e2e: needs docker + kind (set KOPS_E2E=1)"]

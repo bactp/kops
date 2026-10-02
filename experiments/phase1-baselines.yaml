@@ -1,0 +1,7 @@
+name: phase1-baselines
+scenarios: [kops-net-service-endpoint-repair-001]
+seeds: [1, 2]
+trials: 1
+agents:
+  - {name: null, kind: noop}
+  - {name: oracle, kind: oracle}
