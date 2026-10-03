@@ -128,7 +128,18 @@ def router() -> APIRouter:
 
     @r.get("/logout")
     async def logout(request: Request):
+        """End the platform session AND the identity provider's SSO session. Clearing only our cookie left the
+        Keycloak session alive, so the next visit logged the same user straight back in and a different account
+        could not even be registered ("already_logged_in")."""
+        from urllib.parse import urlencode
+        cfg: Settings = request.app.state.settings
         request.session.clear()
+        if cfg.oidc_issuer and cfg.oidc_client_id:
+            home = (cfg.oidc_redirect_uri.rsplit("/auth/callback", 1)[0] if cfg.oidc_redirect_uri
+                    else str(request.base_url).rstrip("/")) + "/"
+            query = urlencode({"client_id": cfg.oidc_client_id, "post_logout_redirect_uri": home})
+            return RedirectResponse(f"{cfg.oidc_issuer.rstrip('/')}/protocol/openid-connect/logout?{query}",
+                                    status_code=302)
         return RedirectResponse("/", status_code=302)
 
     return r
