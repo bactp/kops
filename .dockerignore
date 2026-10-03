@@ -1,0 +1,13 @@
+.git
+.venv
+.pytest_cache
+__pycache__
+results
+.kops-run
+tests
+docs
+experiments
+node_modules
+*.db
+web/tests
+web/dev

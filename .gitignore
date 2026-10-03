@@ -4,3 +4,6 @@ __pycache__/
 .pytest_cache/
 .kops-run/
 results/
+node_modules/
+*.db
+deploy/out/

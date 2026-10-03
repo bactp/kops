@@ -1,0 +1,29 @@
+{
+  "realm": "kops",
+  "enabled": true,
+  "displayName": "KOPS",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "verifyEmail": false,
+  "sslRequired": "none",
+  "bruteForceProtected": true,
+  "roles": {"realm": [{"name": "kops-admin", "description": "KOPS platform administrator"}]},
+  "clients": [
+    {
+      "clientId": "kops-web",
+      "name": "KOPS dashboard",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["__PUBLIC_URL__/*"],
+      "webOrigins": ["__PUBLIC_URL__"],
+      "attributes": {"pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "__PUBLIC_URL__/*"},
+      "defaultClientScopes": ["web-origins", "profile", "roles", "email"]
+    }
+  ]
+}

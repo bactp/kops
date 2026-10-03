@@ -1,0 +1,2 @@
+# Scenario ids whose API-level reset was proven by `kops selftest-vm`.
+kops-net-service-endpoint-repair-001

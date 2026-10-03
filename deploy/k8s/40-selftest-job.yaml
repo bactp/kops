@@ -1,0 +1,21 @@
+# One shard of `kops selftest-vm`. Created by scripts/selftest-vm.sh (placeholders: __SHARD__, __NAME__, __IMAGE__, __WORKERS__).
+apiVersion: batch/v1
+kind: Job
+metadata: {name: __NAME__, namespace: kops-gw, labels: {app: kops-selftest}}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 28800
+  template:
+    metadata: {labels: {app: kops-selftest}}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: kops-platform
+      containers:
+        - name: selftest
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          args: ["kops", "selftest-vm", "--workers", "__WORKERS__", "--shard", "__SHARD__", "--out", "/tmp/out.json"]
+          envFrom: [{configMapRef: {name: kops-platform}}]
+          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
+          volumeMounts: [{name: work, mountPath: /var/run/kops}]
+      volumes: [{name: work, emptyDir: {}}]

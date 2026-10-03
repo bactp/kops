@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata: {name: kops-gw, labels: {app.kubernetes.io/part-of: kops}}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: kops-auth, labels: {app.kubernetes.io/part-of: kops}}

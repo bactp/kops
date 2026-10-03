@@ -1,0 +1,58 @@
+# Bundled identity provider. KOPS only depends on the OIDC protocol, so any other IdP can replace this.
+# Dev-mode Keycloak with a file database on a volume. Placeholders are filled in by scripts/deploy.sh.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: keycloak-data, namespace: kops-auth}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn-1r
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: keycloak-realm, namespace: kops-auth}
+data:
+  kops-realm.json: |
+__REALM_JSON__
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: keycloak, namespace: kops-auth, labels: {app: keycloak}}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: keycloak}}
+  template:
+    metadata: {labels: {app: keycloak}}
+    spec:
+      securityContext: {fsGroup: 1000}
+      containers:
+        - name: keycloak
+          image: __KEYCLOAK_IMAGE__
+          args: ["start-dev", "--import-realm"]
+          env:
+            - {name: KC_BOOTSTRAP_ADMIN_USERNAME, value: kcadmin}
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom: {secretKeyRef: {name: keycloak-admin, key: password}}
+            - {name: KC_HOSTNAME, value: "__AUTH_URL__"}
+            - {name: KC_HTTP_ENABLED, value: "true"}
+            - {name: KC_HEALTH_ENABLED, value: "true"}
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /realms/kops, port: 8080}, initialDelaySeconds: 30, periodSeconds: 10, failureThreshold: 12}
+          resources: {requests: {cpu: 200m, memory: 700Mi}, limits: {memory: 1500Mi}}
+          volumeMounts:
+            - {name: data, mountPath: /opt/keycloak/data/h2}
+            - {name: realm, mountPath: /opt/keycloak/data/import}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: keycloak-data}
+        - name: realm
+          configMap: {name: keycloak-realm}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: keycloak, namespace: kops-auth}
+spec:
+  type: NodePort
+  selector: {app: keycloak}
+  ports: [{port: 8080, targetPort: 8080, nodePort: 30880}]

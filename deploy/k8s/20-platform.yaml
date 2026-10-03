@@ -1,0 +1,66 @@
+# Placeholders (__PUBLIC_URL__, __AUTH_URL__, __IMAGE__, __ADMIN_USERS__) are filled in by scripts/deploy.sh.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: kops-platform-data, namespace: kops-gw}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn-1r
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: kops-platform, namespace: kops-gw}
+data:
+  KOPS_PROVIDER: kubevirt
+  KOPS_GOLDEN_IMAGE: __GOLDEN_IMAGE__
+  KOPS_PLATFORM_NAMESPACE: kops-gw
+  KOPS_CATALOG_FILE: /catalog/available.txt
+  KOPS_OIDC_ISSUER: __AUTH_URL__/realms/kops
+  KOPS_OIDC_CLIENT_ID: kops-web
+  KOPS_OIDC_REDIRECT_URI: __PUBLIC_URL__/auth/callback
+  KOPS_ADMIN_USERS: __ADMIN_USERS__
+  KOPS_OIDC_ADMIN_ROLE: kops-admin
+  KOPS_MAX_SESSIONS: "__MAX_SESSIONS__"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: kops-platform, namespace: kops-gw, labels: {app: kops-platform}}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: kops-platform}}
+  template:
+    metadata: {labels: {app: kops-platform}}
+    spec:
+      serviceAccountName: kops-platform
+      securityContext: {fsGroup: 10001}
+      containers:
+        - name: api
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: kops-platform}
+            - secretRef: {name: kops-platform-secret}
+          ports: [{containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /readyz, port: 8000}, periodSeconds: 10, failureThreshold: 6}
+          livenessProbe: {httpGet: {path: /healthz, port: 8000}, periodSeconds: 20, failureThreshold: 6}
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 1Gi}}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: work, mountPath: /var/run/kops}
+            - {name: catalog, mountPath: /catalog, readOnly: true}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: kops-platform-data}
+        - name: work
+          emptyDir: {}
+        - name: catalog
+          configMap: {name: kops-catalog}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: kops-platform, namespace: kops-gw}
+spec:
+  type: NodePort
+  selector: {app: kops-platform}
+  ports: [{port: 8000, targetPort: 8000, nodePort: 30800}]

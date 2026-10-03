@@ -11,24 +11,23 @@ Scenario → initial state / injected fault → agent observes and acts (via Too
 
 ## Status
 
-**Phase 1 (pipeline proof) is implemented for one scenario.** Everything else is still a design.
+**v0.1 (in progress, deployed on the lab cluster): Practice mode and Playground on KubeVirt sandboxes, with a web dashboard and accounts.** See [`CHANGELOG.md`](CHANGELOG.md), the design in [`docs/simulator-design.md`](docs/simulator-design.md), the API in [`docs/platform-api.md`](docs/platform-api.md) and the runbook in [`docs/operations.md`](docs/operations.md).
 
-- Runs today: `kind` backend (one fresh cluster per trial, private kubeconfig), kubectl-only Tool Gateway, shell-loop agent over any OpenAI-compatible endpoint, null and oracle agents, a declarative verifier (5 check types), `selftest`, trial records and a comparison table.
-- Scenario available: `kops-net-service-endpoint-repair-001` (CKA Troubleshooting / CKAD Services & Networking).
-- Not built yet: workstation container, `kind-node` and `vm` backends, docs mirror, multi-context tasks, held-out split, contamination scanner, scoring beyond PASS/FAIL. See [`docs/design-review.md`](docs/design-review.md).
-- Design entry point: [`docs/00-architecture-proposal.md`](docs/00-architecture-proposal.md). Decisions: [`docs/decision-log.md`](docs/decision-log.md).
-- Schemas (proposed `kops/v1alpha1`): [`schemas/`](schemas/). Scenarios: [`scenarios/`](scenarios/)
+- Platform: FastAPI backend (`src/kops/platform/`), static dashboard (`web/`), `KubeVirtProvider` (`src/kops/providers/kubevirt.py`), OIDC login with a bundled Keycloak (self-registration).
+- Practice: pick a task, get a disposable Kubernetes cluster (about 2 minutes), work in a browser terminal like the exam (`base` then ssh to the node), CHECK with evidence per criterion, hints, solution, Next/Restart (about 40 seconds when the scenario's API-level reset is proven).
+- Scenarios: 60 for CKA and CKAD; the catalogue shows only those validated on the KubeVirt sandbox (`catalog/available.txt`).
+- Also available: the Phase 1 CLI on kind (`kops lint | selftest | run | lab`), which remains the quick way to author a scenario.
+- Later releases: Mock Exam, docs mirror, editor, node-level scenarios, agent gateway (see the release plan).
 
 ```bash
-uv venv --python 3.12 .venv && uv pip install -e ".[dev]"   # kind + kubectl 1.35 must be in ~/.local/share/kops/bin
+# author or check a scenario on a laptop with docker + kind
+uv venv --python 3.12 .venv && uv pip install -e ".[dev]"
 .venv/bin/kops lint kops-net-service-endpoint-repair-001
 .venv/bin/kops selftest kops-net-service-endpoint-repair-001
-.venv/bin/kops run experiments/phase1-baselines.yaml
-
-# take the task yourself:
-.venv/bin/kops lab up kops-net-service-endpoint-repair-001      # prints the task + env vars
-.venv/bin/kops lab verify kops-net-service-endpoint-repair-001  # grade your work (re-runnable)
-.venv/bin/kops lab down kops-net-service-endpoint-repair-001
+.venv/bin/kops lab up kops-net-service-endpoint-repair-001       # take the task yourself in the terminal
+# run the platform tests
+.venv/bin/pytest -q
+# deploy: see docs/operations.md
 ```
 
 ## Principles (frozen)

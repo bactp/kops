@@ -1,0 +1,2 @@
+# Scenario ids the KubeVirt provider can run (maintained by scripts/collect-selftest-vm.sh).
+kops-net-service-endpoint-repair-001

@@ -1,0 +1,45 @@
+# The platform manages session namespaces and VMs. v0.1 uses a cluster-wide role limited to the resources it needs;
+# narrowing it to labelled namespaces is a hardening item for v1.0.
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: kops-platform, namespace: kops-gw}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: kops-platform}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, create, patch, update, delete]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, create, patch, update, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, list, create, patch, update, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: kops-platform}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: kops-platform}
+subjects: [{kind: ServiceAccount, name: kops-platform, namespace: kops-gw}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: kops-platform-secrets, namespace: kops-gw}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, create, patch, update, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: kops-platform-secrets, namespace: kops-gw}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: kops-platform-secrets}
+subjects: [{kind: ServiceAccount, name: kops-platform, namespace: kops-gw}]
