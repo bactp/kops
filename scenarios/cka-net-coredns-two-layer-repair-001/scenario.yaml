@@ -1,0 +1,119 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-net-coredns-two-layer-repair-001
+revision: 1
+title: Restore cluster DNS when both the DNS Service and the Corefile are broken
+status: validated
+family_id: PF-NET-009
+difficulty:
+  level: 3
+  rationale: 'Two layers of fault in kube-system: the Service selects nothing (timeouts) and, once fixed, the Corefile serves the wrong cluster domain (NXDOMAIN).'
+tags:
+- coredns
+- dns
+- corefile
+- kube-system
+profiles:
+  cka:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKA-NET-06
+    mapping_rationale: Understand and use CoreDNS.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: dns-
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: kube-system Service kube-dns selects k8s-app=kube-dns-legacy (no endpoints) and the coredns ConfigMap's Corefile serves the domain cluster.lcl instead of cluster.local.
+  fixtures: []
+  faults:
+  - id: dns_service_selector
+    category: wrong-reference
+    layer: network
+    description: kube-dns Service selector matches no pods
+  - id: corefile_domain_typo
+    category: misconfiguration
+    layer: network
+    description: Corefile kubernetes plugin uses the wrong cluster domain
+constraints:
+- id: keep_forwarding
+  description: Keep the Corefile's upstream forwarding and the kube-dns Service identity.
+  enforced_by: invariant
+  invariant: dns_config_intact
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: cluster_dns_works
+  kind: goal
+  required: true
+  description: kubernetes.default.svc.cluster.local resolves from a pod and kube-dns has ready endpoints
+- id: dns_config_intact
+  kind: guard
+  required: true
+  description: Corefile still forwards to /etc/resolv.conf and kube-dns ClusterIP/UID unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - cluster_dns_works
+    must_pass:
+    - dns_config_intact
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 100
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-service-only.sh
+  - reference/wrong-corefile-only.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

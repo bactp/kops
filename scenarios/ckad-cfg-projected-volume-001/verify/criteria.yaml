@@ -1,0 +1,51 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: ckad-cfg-projected-volume-001
+criteria:
+  - id: index_file
+    invariant: index_served
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/index.html"
+      expect: reachable
+      status: 200
+      body_regex: '^page-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: token_file
+    invariant: token_served
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/token.txt"
+      expect: reachable
+      status: 200
+      body_regex: '^{{tok}}\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: image
+    invariant: mount_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].image', op: eq, value: busybox:1.36.1}
+
+  - id: mount_path
+    invariant: mount_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].volumeMounts[0].mountPath', op: eq, value: /etc/site}
+
+  - id: one_volume
+    invariant: mount_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.volumes', op: exists}

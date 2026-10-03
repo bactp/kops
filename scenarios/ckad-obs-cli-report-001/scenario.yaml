@@ -1,0 +1,133 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: ckad-obs-cli-report-001
+revision: 1
+title: Answer three questions about a set of pods using kubectl output shaping
+status: validated
+family_id: PF-OBS-006
+difficulty:
+  level: 2
+  rationale: Sorting, custom columns and phase counting with built-in CLI tools; the answers are static per seed but cannot be guessed from names alone.
+tags:
+- kubectl
+- jsonpath
+- sort-by
+- custom-columns
+- diagnosis
+profiles:
+  cka:
+    enabled: false
+  ckad:
+    enabled: true
+    domain: observability-maintenance
+    primary_competency: CKAD-AOM-03
+    mapping_rationale: Use built-in CLI tools to monitor Kubernetes applications.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: cli-
+    pre:
+      type: choice
+      choices:
+      - task
+      - unit
+      - shard
+      - slot
+    bigidx:
+      type: choice
+      choices:
+      - 2
+      - 3
+    nfail:
+      type: choice
+      choices:
+      - 1
+      - 2
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Five bare pods {{pre}}-1 .. {{pre}}-5 created in order 2 s apart. Pod {{pre}}-{{bigidx}} requests 512Mi, the others 64Mi. The last {{nfail}} pod(s) exit with status 1 (phase Failed).
+  fixtures: []
+  faults:
+  - id: none
+    category: none
+    layer: object
+    description: diagnosis task; nothing to repair
+constraints:
+- id: read_only
+  description: Do not modify or delete the pods.
+  enforced_by: invariant
+  invariant: pods_untouched
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: answers_recorded
+  kind: goal
+  required: true
+  description: ConfigMap pod-report holds the oldest pod, the pod with the largest memory request and the number of pods not Running
+- id: pods_untouched
+  kind: guard
+  required: true
+  description: All five pods still exist
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - answers_recorded
+    must_pass:
+    - pods_untouched
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-count-all-pods.sh
+  - reference/wrong-delete-failed.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

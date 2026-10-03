@@ -1,0 +1,161 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-cfg-configmap-ref-repair-001
+revision: 1
+title: Repair a Deployment whose ConfigMap references do not resolve
+status: validated
+family_id: PF-CFG-001
+difficulty:
+  level: 2
+  rationale: Two independent reference defects (key spelling, object name) hide behind one symptom; the shortcut of hardcoding values must be avoided.
+tags:
+- configmap
+- env
+- createcontainerconfigerror
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-02
+    mapping_rationale: The skill is wiring ConfigMap values into an application's environment.
+  ckad:
+    enabled: true
+    domain: environment-config-security
+    primary_competency: CKAD-AEC-05
+    mapping_rationale: Consuming ConfigMap keys through env references is the ConfigMaps competency.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: cfg-
+    app:
+      type: choice
+      choices:
+      - mailer
+      - scheduler
+      - exporter
+      - resizer
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    level:
+      type: choice
+      choices:
+      - debug
+      - warn
+      - trace
+    mode:
+      type: choice
+      choices:
+      - batch
+      - stream
+      - lazy
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: ConfigMap {{app}}-settings has keys log_level={{level}} and mode={{mode}}. Deployment {{app}} (2 replicas) reads SETTING via configMapKeyRef key LOG_LEVEL (wrong case, key does not exist) and MODE from a ConfigMap named {{app}}-setting (missing the final s). Pods are stuck in CreateContainerConfigError.
+  fixtures:
+  - fixtures/configmap.yaml
+  - fixtures/service.yaml
+  - fixtures/deployment.yaml
+  faults:
+  - id: wrong_key_case
+    category: wrong-reference
+    layer: object
+    description: configMapKeyRef key LOG_LEVEL does not exist (key is log_level)
+  - id: wrong_configmap_name
+    category: wrong-reference
+    layer: object
+    description: configMapKeyRef name {{app}}-setting does not exist
+constraints:
+- id: keep_data
+  description: Do not change the existing ConfigMap values.
+  enforced_by: invariant
+  invariant: configmap_unchanged
+- id: no_literals
+  description: Values must come from the ConfigMap, not be copied into the Deployment.
+  enforced_by: invariant
+  invariant: no_hardcoded_values
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: app_uses_configmap_values
+  kind: goal
+  required: true
+  description: Clients receive 'SETTING MODE' built from the ConfigMap values
+- id: rollout_healthy
+  kind: goal
+  required: true
+  description: Deployment rollout complete
+- id: configmap_unchanged
+  kind: guard
+  required: true
+  description: ConfigMap data unchanged
+- id: no_hardcoded_values
+  kind: guard
+  required: true
+  description: SETTING and MODE env entries have no literal value
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - app_uses_configmap_values
+    - rollout_healthy
+    must_pass:
+    - configmap_unchanged
+    - no_hardcoded_values
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-hardcode.sh
+  - reference/wrong-add-upper-key.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

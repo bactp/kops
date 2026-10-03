@@ -1,0 +1,156 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-res-limitrange-max-001
+revision: 1
+title: Fit a Deployment's resources into the namespace LimitRange
+status: validated
+family_id: PF-CFG-005
+difficulty:
+  level: 2
+  rationale: Pods are rejected by an admission policy that must be read from ReplicaSet events; relaxing or deleting the LimitRange is blocked.
+tags:
+- limitrange
+- resources
+- admission
+- limits
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-05
+    mapping_rationale: Pod admission against a LimitRange.
+  ckad:
+    enabled: true
+    domain: environment-config-security
+    primary_competency: CKAD-AEC-03
+    mapping_rationale: Understand requests, limits, quotas (LimitRange).
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: lim-
+    app:
+      type: choice
+      choices:
+      - exporter
+      - planner
+      - indexer
+      - cruncher
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    max:
+      type: choice
+      choices:
+      - 256
+      - 384
+      - 512
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: 'LimitRange {{app}}-limits in {{ns}}: container memory min 64Mi, max {{max}}Mi. Deployment {{app}} (2 replicas) asks for limit 1Gi / request 800Mi, so every pod is rejected.'
+  fixtures:
+  - fixtures/limitrange.yaml
+  - fixtures/web.yaml
+  faults:
+  - id: limit_above_range_max
+    category: resource-exhaustion
+    layer: object
+    description: container memory limit exceeds the LimitRange maximum
+constraints:
+- id: keep_policy
+  description: Do not modify or delete the LimitRange.
+  enforced_by: invariant
+  invariant: limitrange_unchanged
+- id: keep_replicas
+  description: Keep 2 replicas.
+  enforced_by: invariant
+  invariant: replicas_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: pods_running
+  kind: goal
+  required: true
+  description: Both replicas Running and the rollout complete
+- id: limit_in_range
+  kind: goal
+  required: true
+  description: Memory limit is at most {{max}}Mi
+- id: limit_above_minimum
+  kind: guard
+  required: true
+  description: Memory limit is at least 64Mi (policy minimum)
+- id: limitrange_unchanged
+  kind: guard
+  required: true
+  description: LimitRange spec unchanged
+- id: replicas_unchanged
+  kind: guard
+  required: true
+  description: spec.replicas still 2
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - pods_running
+    - limit_in_range
+    must_pass:
+    - limit_above_minimum
+    - limitrange_unchanged
+    - replicas_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-delete-limitrange.sh
+  - reference/wrong-raise-limitrange.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

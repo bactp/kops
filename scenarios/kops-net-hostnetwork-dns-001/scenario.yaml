@@ -1,0 +1,141 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-net-hostnetwork-dns-001
+revision: 1
+title: Fix service-name resolution for a pod that has to run on the node's network
+status: validated
+family_id: PF-NET-010
+difficulty:
+  level: 2
+  rationale: Pods on the host network do not use cluster DNS by default; the obvious fixes (FQDN, turning hostNetwork off) either do not work or violate a constraint.
+tags:
+- hostnetwork
+- dnspolicy
+- dns
+- pod-networking
+- logs
+profiles:
+  cka:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKA-NET-01
+    mapping_rationale: 'Understanding connectivity between Pods: pod network vs host network and which DNS they use.'
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-02
+    mapping_rationale: Troubleshooting access to an application through a Service.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: hn-
+    svc:
+      type: choice
+      choices:
+      - pricing
+      - inventory-api
+      - geo-lookup
+      - quotes-api
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: 'Backend Deployment/Service {{svc}} works. Deployment client runs with hostNetwork: true and dnsPolicy ClusterFirst (ignored on the host network), so the name {{svc}} does not resolve; its log shows only FAIL lines.'
+  fixtures:
+  - fixtures/backend.yaml
+  - fixtures/client.yaml
+  faults:
+  - id: hostnetwork_without_cluster_dns
+    category: misconfiguration
+    layer: network
+    description: hostNetwork pod resolves names with the node's resolver
+constraints:
+- id: keep_hostnetwork
+  description: The client must keep running on the host network.
+  enforced_by: invariant
+  invariant: hostnetwork_kept
+- id: backend_untouched
+  description: Do not modify the backend.
+  enforced_by: invariant
+  invariant: backend_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: client_succeeds
+  kind: goal
+  required: true
+  description: The client's recent log lines show successful calls and no failures
+- id: hostnetwork_kept
+  kind: guard
+  required: true
+  description: client pods still use hostNetwork
+- id: backend_unchanged
+  kind: guard
+  required: true
+  description: Backend Deployment and Service unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - client_succeeds
+    must_pass:
+    - hostnetwork_kept
+    - backend_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-disable-hostnetwork.sh
+  - reference/wrong-use-fqdn.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

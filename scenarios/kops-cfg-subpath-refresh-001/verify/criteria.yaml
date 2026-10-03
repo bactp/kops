@@ -1,0 +1,34 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-cfg-subpath-refresh-001
+criteria:
+  - id: served_text
+    invariant: new_text_served
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^{{new}}\s*$'
+      attempts: 5
+      timeout_seconds: 3
+  - id: cm_value
+    invariant: configmap_has_new_text
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "{{app}}-page", namespace: "{{ns}}"}, jsonpath: '.data["index.html"]', op: regex, value: '^{{new}}\s*$'}
+  - id: rollout_done
+    invariant: rollout_healthy
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+  - id: cm_uid
+    invariant: configmap_not_recreated
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: ConfigMap, name: "{{app}}-page", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [".metadata.uid"], baseline: post-setup}

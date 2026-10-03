@@ -1,0 +1,32 @@
+competency_source:
+- certification: CKA
+  curriculum_version: v1.35
+  domain: Storage
+  competency_id: CKA-STO-02
+  competency: Configure volume types, access modes and reclaim policies
+design_references:
+- repository: k16s
+  license: PolyForm-Noncommercial-1.0.0
+  used_for: problem-family-idea
+  notes: topic label only, via docs/problem-family-catalog.yaml PF-STO-003; no text, code or manifests used
+- repository: kubernetes.io documentation
+  license: CC-BY-4.0
+  used_for: none
+  notes: task and fixtures written from the concept pages listed in upstream_docs
+upstream_docs:
+- https://kubernetes.io/docs/tasks/administer-cluster/change-pv-reclaim-policy/
+copied_question: false
+copied_code: []
+authoring:
+  method: human-original-llm-assisted
+  authors:
+  - kops-a2-team
+  date: '2026-10-02'
+contamination_review:
+  reviewer: TBD
+  date: '2026-10-02'
+  checks:
+    no_exam_dump_source: true
+    no_quarantined_repo_text: true
+    fingerprint_scan_clean: true
+    max_ngram_overlap: 0.0

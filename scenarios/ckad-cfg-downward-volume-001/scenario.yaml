@@ -1,0 +1,132 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: ckad-cfg-downward-volume-001
+revision: 1
+title: Expose the pod's labels and namespace to the application as files via the downward API
+status: validated
+family_id: PF-CFG-003
+difficulty:
+  level: 2
+  rationale: Replacing an emptyDir by a downwardAPI volume needs a JSON patch (merge would leave two volume sources); verified through the served files.
+tags:
+- downward-api
+- volumes
+- labels
+profiles:
+  cka:
+    enabled: false
+  ckad:
+    enabled: true
+    domain: design-build
+    primary_competency: CKAD-ADB-04
+    mapping_rationale: Utilizing ephemeral and projected volumes (downward API volume).
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: meta-
+    app:
+      type: choice
+      choices:
+      - inspector
+      - echoer
+      - whoami
+      - reflector
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} serves the directory /etc/podinfo, which is currently an empty emptyDir volume named podinfo (so /labels and /namespace return 404).
+  fixtures:
+  - fixtures/service.yaml
+  - fixtures/deployment.yaml
+  faults:
+  - id: missing_downward_api
+    category: missing-resource
+    layer: object
+    description: podinfo volume has no content
+constraints:
+- id: keep_deployment
+  description: Keep the Deployment, its image and the mount path.
+  enforced_by: invariant
+  invariant: mount_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: labels_file_served
+  kind: goal
+  required: true
+  description: GET /labels returns the pod labels, including app="{{app}}"
+- id: namespace_file_served
+  kind: goal
+  required: true
+  description: GET /namespace returns {{ns}}
+- id: mount_unchanged
+  kind: guard
+  required: true
+  description: Container image and mount path unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - labels_file_served
+    - namespace_file_served
+    must_pass:
+    - mount_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-merge-patch.sh
+  - reference/wrong-labels-only.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

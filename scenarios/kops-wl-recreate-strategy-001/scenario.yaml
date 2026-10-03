@@ -1,0 +1,155 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-wl-recreate-strategy-001
+revision: 1
+title: Switch a Deployment that holds an exclusive lock to the Recreate strategy
+status: validated
+family_id: PF-WKL-002
+difficulty:
+  level: 2
+  rationale: Needs the strategy type changed and the rollingUpdate block cleared, then an update rolled out so the change is proven.
+tags:
+- deployment
+- strategy
+- recreate
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-01
+    mapping_rationale: Changing the rollout strategy and performing the update is the rolling-update competency.
+  ckad:
+    enabled: true
+    domain: deployment
+    primary_competency: CKAD-ADP-02
+    mapping_rationale: Deployment update strategies are part of understanding Deployments and rolling updates.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: lock-
+    app:
+      type: choice
+      choices:
+      - indexer
+      - reporter
+      - spooler
+      - compactor
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    ver:
+      type: choice
+      choices:
+      - v2
+      - v3
+      - v4
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (3 replicas) uses RollingUpdate maxSurge=1 maxUnavailable=1 and serves banner v1. Replicas hold a per-pod lock in the app, so old and new pods must never run side by side during an update.
+  fixtures:
+  - fixtures/deployment.yaml
+  - fixtures/service.yaml
+  faults:
+  - id: rolling_strategy
+    category: misconfiguration
+    layer: object
+    description: RollingUpdate lets old and new pods overlap
+constraints:
+- id: keep_replicas
+  description: Keep 3 replicas.
+  enforced_by: invariant
+  invariant: replicas_unchanged
+- id: keep_deployment
+  description: Do not delete the Deployment.
+  enforced_by: invariant
+  invariant: deployment_not_recreated
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: strategy_recreate
+  kind: goal
+  required: true
+  description: spec.strategy.type is Recreate and no rollingUpdate block remains
+- id: new_version_served
+  kind: goal
+  required: true
+  description: The Service returns the new banner
+- id: rollout_complete
+  kind: goal
+  required: true
+  description: Rollout finished with all replicas ready
+- id: deployment_not_recreated
+  kind: guard
+  required: true
+  description: Deployment UID unchanged
+- id: replicas_unchanged
+  kind: guard
+  required: true
+  description: spec.replicas still 3
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - strategy_recreate
+    - new_version_served
+    must_pass:
+    - rollout_complete
+    - deployment_not_recreated
+    - replicas_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-type-only.sh
+  - reference/wrong-no-rollout.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

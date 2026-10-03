@@ -1,0 +1,37 @@
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: client
+   namespace: {{ns}}
+ spec:
+   replicas: 1
+   selector:
+     matchLabels: {app: client, role: {{cl}}}
+   template:
+     metadata:
+       labels: {app: client, role: {{cl}}}
+     spec:
+       containers:
+         - name: c
+           image: busybox:1.36.1
+           imagePullPolicy: IfNotPresent
+           command: ["sleep", "3600"]
+---
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: scanner
+   namespace: {{ns}}
+ spec:
+   replicas: 1
+   selector:
+     matchLabels: {app: scanner, role: scanner}
+   template:
+     metadata:
+       labels: {app: scanner, role: scanner}
+     spec:
+       containers:
+         - name: c
+           image: busybox:1.36.1
+           imagePullPolicy: IfNotPresent
+           command: ["sleep", "3600"]

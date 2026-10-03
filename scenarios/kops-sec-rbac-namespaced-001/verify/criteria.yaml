@@ -1,0 +1,75 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-sec-rbac-namespaced-001
+criteria:
+  - id: can_get_pods
+    invariant: read_access_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: get, resource: pods, expect: allow, namespace: "{{ns}}"}
+
+  - id: can_list_pods
+    invariant: read_access_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: list, resource: pods, expect: allow, namespace: "{{ns}}"}
+
+  - id: can_watch_pods
+    invariant: read_access_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: watch, resource: pods, expect: allow, namespace: "{{ns}}"}
+
+  - id: can_get_logs
+    invariant: read_access_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: get, resource: pods, expect: allow, namespace: "{{ns}}", subresource: log}
+
+  - id: can_get_extra
+    invariant: read_access_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: get, resource: {{extra}}, expect: allow, namespace: "{{ns}}"}
+
+  - id: can_list_extra
+    invariant: read_access_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: list, resource: {{extra}}, expect: allow, namespace: "{{ns}}"}
+
+  - id: cannot_delete_pods
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: delete, resource: pods, expect: deny, namespace: "{{ns}}"}
+
+  - id: cannot_create_pods
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: create, resource: pods, expect: deny, namespace: "{{ns}}"}
+
+  - id: cannot_read_secrets
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: get, resource: secrets, expect: deny, namespace: "{{ns}}"}
+
+  - id: cannot_list_deployments
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: list, resource: deployments.apps, expect: deny, namespace: "{{ns}}"}
+
+  - id: cannot_read_other_ns
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: list, resource: pods, expect: deny, namespace: "kube-system"}
+
+  - id: cannot_list_nodes
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: list, resource: nodes, expect: deny}

@@ -1,0 +1,51 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: ckad-obs-api-deprecation-001
+criteria:
+  - id: hpa_version
+    invariant: api_versions_migrated
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "release-manifests", namespace: "{{ns}}"}, jsonpath: '.data["hpa.yaml"]', op: regex, value: '(?m)^apiVersion: autoscaling/v2$'}
+
+  - id: pdb_version
+    invariant: api_versions_migrated
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "release-manifests", namespace: "{{ns}}"}, jsonpath: '.data["pdb.yaml"]', op: regex, value: '(?m)^apiVersion: policy/v1$'}
+
+  - id: cronjob_version
+    invariant: api_versions_migrated
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "release-manifests", namespace: "{{ns}}"}, jsonpath: '.data["cronjob.yaml"]', op: regex, value: '(?m)^apiVersion: batch/v1$'}
+
+  - id: flowschema_version
+    invariant: api_versions_migrated
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "release-manifests", namespace: "{{ns}}"}, jsonpath: '.data["flowschema.yaml"]', op: regex, value: '(?m)^apiVersion: flowcontrol.apiserver.k8s.io/v1$'}
+
+  - id: hpa_kind
+    invariant: kinds_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "release-manifests", namespace: "{{ns}}"}, jsonpath: '.data["hpa.yaml"]', op: regex, value: '(?m)^kind: HorizontalPodAutoscaler$'}
+
+  - id: pdb_kind
+    invariant: kinds_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "release-manifests", namespace: "{{ns}}"}, jsonpath: '.data["pdb.yaml"]', op: regex, value: '(?m)^kind: PodDisruptionBudget$'}
+
+  - id: cronjob_kind
+    invariant: kinds_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "release-manifests", namespace: "{{ns}}"}, jsonpath: '.data["cronjob.yaml"]', op: regex, value: '(?m)^kind: CronJob$'}
+
+  - id: flowschema_kind
+    invariant: kinds_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "release-manifests", namespace: "{{ns}}"}, jsonpath: '.data["flowschema.yaml"]', op: regex, value: '(?m)^kind: FlowSchema$'}

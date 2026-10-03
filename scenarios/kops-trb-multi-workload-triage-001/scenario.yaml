@@ -1,0 +1,170 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-trb-multi-workload-triage-001
+revision: 1
+title: Triage a namespace with three differently broken Deployments and one healthy one
+status: validated
+family_id: PF-OBS-004
+difficulty:
+  level: 3
+  rationale: Three unrelated fault classes (image, command, scheduling) in one namespace plus a healthy distractor; scale-to-zero, deletion and node relabelling are blocked.
+tags:
+- troubleshooting
+- imagepullbackoff
+- crashloopbackoff
+- pending
+- multi-fault
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-04
+    mapping_rationale: Evaluating container output and pod state across several failing workloads.
+  ckad:
+    enabled: true
+    domain: observability-maintenance
+    primary_competency: CKAD-AOM-05
+    mapping_rationale: Debugging in Kubernetes across different failure modes.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: triage-
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    a:
+      type: choice
+      choices:
+      - ledger
+      - billing
+      - orders
+    b:
+      type: choice
+      choices:
+      - thumbs
+      - avatars
+      - previews
+    c:
+      type: choice
+      choices:
+      - mailer
+      - pager
+      - notifier
+    d:
+      type: choice
+      choices:
+      - archive
+      - reports
+      - exports
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: 'Namespace {{ns}}: {{a}} is healthy; {{b}} uses a non-existent image tag (ImagePullBackOff); {{c}} has a command that does not exist (crash loop); {{d}} has nodeSelector disktype=ssd that no node satisfies (Pending). Each has 2 replicas and a Service.'
+  fixtures:
+  - fixtures/apps.yaml
+  faults:
+  - id: bad_image_tag
+    category: image
+    layer: object
+    description: '{{b}} image tag does not exist'
+  - id: bad_command
+    category: misconfiguration
+    layer: object
+    description: '{{c}} runs a binary that does not exist'
+  - id: unsatisfiable_selector
+    category: scheduling-constraint
+    layer: object
+    description: '{{d}} requires a node label no node has'
+constraints:
+- id: no_shortcuts
+  description: Keep all 4 Deployments at 2 replicas, do not delete them, and do not label nodes.
+  enforced_by: invariant
+  invariant: replicas_unchanged
+- id: leave_healthy_alone
+  description: Leave the healthy Deployment untouched.
+  enforced_by: invariant
+  invariant: healthy_untouched
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: workloads_recovered
+  kind: goal
+  required: true
+  description: '{{b}}, {{c}} and {{d}} are fully rolled out and answer through their Services'
+- id: replicas_unchanged
+  kind: guard
+  required: true
+  description: All four Deployments have 2 replicas
+- id: healthy_untouched
+  kind: guard
+  required: true
+  description: '{{a}} Deployment unchanged'
+- id: nodes_untouched
+  kind: guard
+  required: true
+  description: No node carries a disktype label
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - workloads_recovered
+    must_pass:
+    - replicas_unchanged
+    - healthy_untouched
+    - nodes_untouched
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-scale-broken-to-zero.sh
+  - reference/wrong-label-the-node.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

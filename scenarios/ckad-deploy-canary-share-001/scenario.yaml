@@ -1,0 +1,134 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: ckad-deploy-canary-share-001
+revision: 1
+title: Send a share of traffic to a canary release that the Service does not select yet
+status: validated
+family_id: PF-WKL-004
+difficulty:
+  level: 2
+  rationale: Both a replica change and a selector change are needed; either one alone gives the wrong traffic split.
+tags:
+- canary
+- deployment-strategy
+- service-selector
+- labels
+profiles:
+  cka:
+    enabled: false
+  ckad:
+    enabled: true
+    domain: deployment
+    primary_competency: CKAD-ADP-01
+    mapping_rationale: Canary deployment implemented with replica ratio and a shared Service selector.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: can-
+    app:
+      type: choice
+      choices:
+      - recommender
+      - checkout
+      - feed
+      - notifier
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}}-stable (4 replicas, labels app,track=stable) and {{app}}-canary (0 replicas, track=canary). Service {{app}} selects app={{app}},track=stable only.
+  fixtures:
+  - fixtures/releases.yaml
+  - fixtures/service.yaml
+  faults:
+  - id: canary_not_selected
+    category: misconfiguration
+    layer: object
+    description: Service selector excludes the canary track; canary has no pods
+constraints:
+- id: keep_deployments
+  description: Do not delete either Deployment or the Service.
+  enforced_by: invariant
+  invariant: objects_preserved
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: canary_gets_a_quarter
+  kind: goal
+  required: true
+  description: 'Service has 4 ready endpoints: 3 stable and 1 canary'
+- id: canary_in_endpoints
+  kind: goal
+  required: true
+  description: The selector no longer excludes canary pods
+- id: objects_preserved
+  kind: guard
+  required: true
+  description: Deployments and Service keep their UIDs
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - canary_gets_a_quarter
+    - canary_in_endpoints
+    must_pass:
+    - objects_preserved
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-scale-only.sh
+  - reference/wrong-selector-only.sh
+  - reference/wrong-full-switch.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

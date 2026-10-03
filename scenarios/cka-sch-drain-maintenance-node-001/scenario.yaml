@@ -1,0 +1,142 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-sch-drain-maintenance-node-001
+revision: 1
+title: Take a labelled worker out of service for maintenance without losing capacity
+status: validated
+family_id: PF-SCH-006
+difficulty:
+  level: 2
+  rationale: Drain refuses to proceed without the right flags (DaemonSet pods, emptyDir), and a bare cordon leaves the workload on the node.
+tags:
+- drain
+- cordon
+- maintenance
+- daemonset
+- emptydir
+profiles:
+  cka:
+    enabled: true
+    domain: cluster-architecture
+    primary_competency: CKA-ARC-04
+    mapping_rationale: Node maintenance (cordon/drain/uncordon) is part of managing the cluster lifecycle.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 2
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: mnt-
+    app:
+      type: choice
+      choices:
+      - queue-worker
+      - api-gw
+      - resizer
+      - scraper
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Two workers; the one labelled maintenance=scheduled hosts about half of the 4 replicas of {{app}} (pods use an emptyDir volume). DaemonSet pods (kindnet, kube-proxy) run on every node.
+  fixtures:
+  - fixtures/web.yaml
+  faults:
+  - id: node_in_service
+    category: scheduling-constraint
+    layer: node
+    description: node scheduled for maintenance still hosts workload and accepts pods
+constraints:
+- id: keep_capacity
+  description: All 4 replicas must remain ready elsewhere; do not scale down.
+  enforced_by: invariant
+  invariant: replicas_unchanged
+- id: other_nodes_schedulable
+  description: Do not cordon any other node.
+  enforced_by: invariant
+  invariant: others_schedulable
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: node_cordoned
+  kind: goal
+  required: true
+  description: Nodes labelled maintenance=scheduled are unschedulable
+- id: workload_moved
+  kind: goal
+  required: true
+  description: All 4 replicas are Running, none on the maintenance node
+- id: replicas_unchanged
+  kind: guard
+  required: true
+  description: spec.replicas still 4
+- id: others_schedulable
+  kind: guard
+  required: true
+  description: Other worker nodes are schedulable
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - node_cordoned
+    - workload_moved
+    must_pass:
+    - replicas_unchanged
+    - others_schedulable
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-cordon-only.sh
+  - reference/wrong-scale-down.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

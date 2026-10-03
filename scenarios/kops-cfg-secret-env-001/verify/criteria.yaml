@@ -1,0 +1,38 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-cfg-secret-env-001
+criteria:
+  - id: page_auth_ok
+    invariant: auth_ok
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^auth-ok\s*$'
+      attempts: 5
+      timeout_seconds: 3
+  - id: secret_keys
+    invariant: secret_has_keys
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Secret, namespace: "{{ns}}"}, jsonpath: ".data.password", op: exists, all_items: false}
+  - id: secret_username_key
+    invariant: secret_has_keys
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Secret, namespace: "{{ns}}"}, jsonpath: ".data.username", op: exists, all_items: false}
+  - id: password_not_literal
+    invariant: no_plaintext_password
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].env[?(@.name=="DB_PASSWORD")].value', op: absent}
+  - id: username_not_literal
+    invariant: no_plaintext_password
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].env[?(@.name=="DB_USERNAME")].value', op: absent}

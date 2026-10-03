@@ -1,0 +1,127 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-sec-clusterrole-nodes-001
+revision: 1
+title: Grant a ServiceAccount cluster-wide read access to nodes and persistent volumes
+status: validated
+family_id: PF-SEC-002
+difficulty:
+  level: 2
+  rationale: Cluster-scoped resources need a ClusterRole and a ClusterRoleBinding; binding a ClusterRole with a namespaced RoleBinding is the classic mistake.
+tags:
+- rbac
+- clusterrole
+- clusterrolebinding
+- nodes
+profiles:
+  cka:
+    enabled: true
+    domain: cluster-architecture
+    primary_competency: CKA-ARC-01
+    mapping_rationale: ClusterRole/ClusterRoleBinding management.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: obs-
+    sa:
+      type: choice
+      choices:
+      - capacity-scraper
+      - inventory-bot
+      - fleet-watcher
+    cr:
+      type: choice
+      choices:
+      - node-inventory
+      - fleet-reader
+      - hardware-view
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: ServiceAccount {{sa}} in {{ns}} has no permissions. It needs cluster-scoped read access.
+  fixtures: []
+  faults:
+  - id: no_cluster_access
+    category: permission
+    layer: object
+    description: no ClusterRole bound to the ServiceAccount
+constraints:
+- id: least_privilege
+  description: Read-only access to nodes and persistentvolumes only.
+  enforced_by: invariant
+  invariant: no_excess_access
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: cluster_read_granted
+  kind: goal
+  required: true
+  description: ServiceAccount can get/list/watch nodes and get/list persistentvolumes
+- id: no_excess_access
+  kind: guard
+  required: true
+  description: ServiceAccount cannot modify nodes, read secrets, or create pods
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - cluster_read_granted
+    must_pass:
+    - no_excess_access
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-namespaced-binding.sh
+  - reference/wrong-cluster-admin.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

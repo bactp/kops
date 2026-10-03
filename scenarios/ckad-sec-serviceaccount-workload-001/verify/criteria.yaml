@@ -1,0 +1,48 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: ckad-sec-serviceaccount-workload-001
+criteria:
+  - id: sa_name_template
+    invariant: dedicated_identity
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.serviceAccountName', op: eq, value: "{{sa}}"}
+
+  - id: sa_exists
+    invariant: dedicated_identity
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.exists, resource: {kind: ServiceAccount, name: "{{sa}}", namespace: "{{ns}}"}, expect: present}
+
+  - id: pods_use_sa
+    invariant: dedicated_identity
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Pod, selector: "app={{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.serviceAccountName', op: eq, value: "{{sa}}"}
+
+  - id: automount_false
+    invariant: no_token_mount
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.automountServiceAccountToken', op: eq, value: false}
+
+  - id: rollout_done
+    invariant: rollout_complete
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+
+  - id: deployment_uid
+    invariant: workload_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec.replicas], baseline: post-setup}
+
+  - id: image_unchanged
+    invariant: workload_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].image', op: eq, value: busybox:1.36.1}

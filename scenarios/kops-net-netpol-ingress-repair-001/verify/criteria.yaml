@@ -1,0 +1,42 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-net-netpol-ingress-repair-001
+criteria:
+  - id: client_reaches_app
+    invariant: clients_can_reach_app
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: "{{ns}}", labels: {role: "{{cl}}"}}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^np-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: scanner_blocked
+    invariant: isolation_kept
+    required: true
+    failure_class: collateral-damage
+    check:
+      type: net.http
+      from: {namespace: "{{ns}}", labels: {role: scanner}}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: blocked
+      attempts: 2
+      timeout_seconds: 3
+
+  - id: default_deny_present
+    invariant: default_deny_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.exists, resource: {kind: NetworkPolicy, name: default-deny-ingress, namespace: "{{ns}}"}, expect: present}
+
+  - id: default_deny_spec
+    invariant: default_deny_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: NetworkPolicy, name: default-deny-ingress, namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.spec], baseline: post-setup}

@@ -1,0 +1,134 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-net-kubeproxy-rollout-undo-001
+revision: 1
+title: Find why a new Service has no data path and repair the broken kube-proxy DaemonSet
+status: validated
+family_id: PF-NET-011
+difficulty:
+  level: 3
+  rationale: Healthy-looking pods and endpoints but an unreachable ClusterIP; the cause is a cluster component (kube-proxy) whose last rollout is stuck. Kubectl-only variant of the node-level networking family.
+tags:
+- kube-proxy
+- daemonset
+- rollout
+- clusterip
+- troubleshooting
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-02
+    mapping_rationale: Troubleshooting a cluster component (kube-proxy) that programs Service routing.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: kp-
+    app:
+      type: choice
+      choices:
+      - inventory
+      - gallery
+      - relay
+      - orders-api
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: The kube-proxy DaemonSet in kube-system was updated to the image tag v1.35.99-broken, which cannot be pulled; no kube-proxy pod runs. A Service {{app}} created afterwards has ready endpoints but no routing rules, so its ClusterIP times out.
+  fixtures:
+  - fixtures/web.yaml
+  - fixtures/service.yaml
+  faults:
+  - id: kube_proxy_bad_image
+    category: image
+    layer: control-plane
+    description: kube-proxy DaemonSet references a non-existent image tag
+constraints:
+- id: keep_daemonset
+  description: Do not delete the kube-proxy DaemonSet or its ConfigMap.
+  enforced_by: invariant
+  invariant: kube_proxy_objects_kept
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: service_reachable
+  kind: goal
+  required: true
+  description: The ClusterIP Service answers HTTP 200
+- id: kube_proxy_running
+  kind: goal
+  required: true
+  description: kube-proxy DaemonSet has all pods ready with a valid image
+- id: kube_proxy_objects_kept
+  kind: guard
+  required: true
+  description: kube-proxy DaemonSet UID and its ConfigMap unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - service_reachable
+    - kube_proxy_running
+    must_pass:
+    - kube_proxy_objects_kept
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 90
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-restart-only.sh
+  - reference/wrong-delete-daemonset.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

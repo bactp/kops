@@ -1,0 +1,149 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-job-native-sidecar-001
+revision: 1
+title: Let a CronJob's Jobs complete by turning its regular sidecar into a native sidecar
+status: validated
+family_id: PF-WKL-008
+difficulty:
+  level: 3
+  rationale: A long-running regular container keeps every Job from completing; the idiomatic fix moves it to an init container with restartPolicy Always, and the run must be proven.
+tags:
+- sidecar
+- native-sidecar
+- cronjob
+- job
+- initcontainers
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-04
+    mapping_rationale: Native sidecars and Jobs are workload primitives.
+  ckad:
+    enabled: true
+    domain: design-build
+    primary_competency: CKAD-ADB-03
+    mapping_rationale: 'Multi-container design patterns: sidecars.'
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: side-
+    app:
+      type: choice
+      choices:
+      - export
+      - archive
+      - rollup
+      - mirror
+    job:
+      type: choice
+      choices:
+      - trial-run
+      - check-1
+      - dry-run
+    marker:
+      type: choice
+      choices:
+      - exported-31c4
+      - exported-8a0d
+      - exported-b27e
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: CronJob {{app}} (schedule 0 0 1 1 *) runs a main container (prints a marker and exits) plus a regular container 'shipper' that sleeps forever, so its Jobs never complete.
+  fixtures:
+  - fixtures/cronjob.yaml
+  faults:
+  - id: regular_sidecar_blocks_job
+    category: misconfiguration
+    layer: object
+    description: long-running sidecar is a regular container
+constraints:
+- id: keep_schedule
+  description: Keep the CronJob's schedule.
+  enforced_by: invariant
+  invariant: cron_settings_kept
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: sidecar_is_native
+  kind: goal
+  required: true
+  description: '''shipper'' is an init container with restartPolicy Always and no longer a regular container'
+- id: run_completed
+  kind: goal
+  required: true
+  description: Job {{job}} created from the CronJob completed and the main container printed the marker
+- id: main_kept
+  kind: guard
+  required: true
+  description: '''main'' is still a regular container'
+- id: cron_settings_kept
+  kind: guard
+  required: true
+  description: CronJob UID and schedule unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - sidecar_is_native
+    - run_completed
+    must_pass:
+    - main_kept
+    - cron_settings_kept
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-delete-sidecar.sh
+  - reference/wrong-run-before-fix.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

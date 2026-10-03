@@ -1,0 +1,155 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-cfg-subpath-refresh-001
+revision: 1
+title: Publish a changed ConfigMap value that a subPath mount does not pick up
+status: validated
+family_id: PF-CFG-001
+difficulty:
+  level: 2
+  rationale: 'Editing the ConfigMap is not enough: the file is mounted through subPath, which is never refreshed, so pods must be restarted.'
+tags:
+- configmap
+- volume
+- subpath
+- rollout-restart
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-02
+    mapping_rationale: Changing application configuration through a ConfigMap and getting it applied.
+  ckad:
+    enabled: true
+    domain: environment-config-security
+    primary_competency: CKAD-AEC-05
+    mapping_rationale: ConfigMap volume behaviour (subPath is not updated) is core ConfigMap knowledge.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: pub-
+    app:
+      type: choice
+      choices:
+      - portal
+      - docs
+      - status
+      - landing
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    old:
+      type: choice
+      choices:
+      - maintenance soon
+      - beta preview
+      - spring sale
+    new:
+      type: choice
+      choices:
+      - now open
+      - general availability
+      - summer sale
+      - v2 is live
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (2 replicas) serves /www/index.html mounted with subPath from ConfigMap {{app}}-page key index.html (value '{{old}}').
+  fixtures:
+  - fixtures/configmap.yaml
+  - fixtures/service.yaml
+  - fixtures/deployment.yaml
+  faults:
+  - id: stale_subpath
+    category: misconfiguration
+    layer: object
+    description: ConfigMap change is not propagated to subPath mounts without a pod restart
+constraints:
+- id: keep_configmap
+  description: Keep using the existing ConfigMap object (do not delete it).
+  enforced_by: invariant
+  invariant: configmap_not_recreated
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: new_text_served
+  kind: goal
+  required: true
+  description: Clients get the new text from the Service
+- id: configmap_has_new_text
+  kind: goal
+  required: true
+  description: ConfigMap key index.html holds the new text
+- id: rollout_healthy
+  kind: goal
+  required: true
+  description: Deployment ready with 2 replicas
+- id: configmap_not_recreated
+  kind: guard
+  required: true
+  description: ConfigMap UID unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - new_text_served
+    - configmap_has_new_text
+    must_pass:
+    - configmap_not_recreated
+    - rollout_healthy
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-edit-only.sh
+  - reference/wrong-restart-only.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

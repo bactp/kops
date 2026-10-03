@@ -1,0 +1,105 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-trb-multi-workload-triage-001
+criteria:
+  - id: rollout_b
+    invariant: workloads_recovered
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{b}}", namespace: "{{ns}}"}}
+
+  - id: rollout_c
+    invariant: workloads_recovered
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{c}}", namespace: "{{ns}}"}}
+
+  - id: rollout_d
+    invariant: workloads_recovered
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{d}}", namespace: "{{ns}}"}}
+
+  - id: http_b
+    invariant: workloads_recovered
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{b}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^{{b}}-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: http_c
+    invariant: workloads_recovered
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{c}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^{{c}}-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: http_d
+    invariant: workloads_recovered
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{d}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^{{d}}-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: replicas_a
+    invariant: replicas_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{a}}", namespace: "{{ns}}"}, jsonpath: '.spec.replicas', op: eq, value: 2}
+
+  - id: replicas_b
+    invariant: replicas_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{b}}", namespace: "{{ns}}"}, jsonpath: '.spec.replicas', op: eq, value: 2}
+
+  - id: replicas_c
+    invariant: replicas_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{c}}", namespace: "{{ns}}"}, jsonpath: '.spec.replicas', op: eq, value: 2}
+
+  - id: replicas_d
+    invariant: replicas_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{d}}", namespace: "{{ns}}"}, jsonpath: '.spec.replicas', op: eq, value: 2}
+
+  - id: healthy_spec
+    invariant: healthy_untouched
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{a}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}
+
+  - id: no_node_labels
+    invariant: nodes_untouched
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.count, resource: {kind: Node, selector: "disktype"}, op: eq, value: 0}

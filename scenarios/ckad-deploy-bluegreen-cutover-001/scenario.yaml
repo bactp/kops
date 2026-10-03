@@ -1,0 +1,153 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: ckad-deploy-bluegreen-cutover-001
+revision: 1
+title: Cut production traffic over from the blue release to the idle green release
+status: validated
+family_id: PF-WKL-004
+difficulty:
+  level: 2
+  rationale: The cutover needs the idle release scaled up before the Service selector moves, while blue must stay available for rollback.
+tags:
+- blue-green
+- deployment-strategy
+- service-selector
+profiles:
+  cka:
+    enabled: false
+  ckad:
+    enabled: true
+    domain: deployment
+    primary_competency: CKAD-ADP-01
+    mapping_rationale: Blue/green deployment implemented with Deployments and a Service selector.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: bg-
+    app:
+      type: choice
+      choices:
+      - storefront
+      - booking
+      - profiles
+      - search
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    v1:
+      type: choice
+      choices:
+      - '1.4'
+      - '2.0'
+      - '3.1'
+    v2:
+      type: choice
+      choices:
+      - '1.5'
+      - '2.1'
+      - '3.2'
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployments {{app}}-blue (3 replicas, track=blue, banner blue-{{v1}}) and {{app}}-green (0 replicas, track=green, banner green-{{v2}}) exist. Service {{app}} selects app={{app}},track=blue.
+  fixtures:
+  - fixtures/releases.yaml
+  - fixtures/service.yaml
+  faults:
+  - id: green_idle
+    category: misconfiguration
+    layer: object
+    description: new release not running; Service points to old track
+constraints:
+- id: rollback_possible
+  description: Keep the blue release deployed with 3 replicas for quick rollback.
+  enforced_by: invariant
+  invariant: blue_kept
+- id: keep_service
+  description: Do not delete and re-create the Service.
+  enforced_by: invariant
+  invariant: service_identity_preserved
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: green_serves
+  kind: goal
+  required: true
+  description: Clients receive the green banner through the Service
+- id: green_ready
+  kind: goal
+  required: true
+  description: Green has 3 ready pods
+- id: blue_kept
+  kind: guard
+  required: true
+  description: Blue Deployment keeps 3 replicas and UID
+- id: service_identity_preserved
+  kind: guard
+  required: true
+  description: Service UID unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - green_serves
+    - green_ready
+    must_pass:
+    - blue_kept
+    - service_identity_preserved
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-selector-only.sh
+  - reference/wrong-delete-blue.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

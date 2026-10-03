@@ -1,0 +1,43 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-sto-pvc-reference-repair-001
+criteria:
+  - id: saved_data
+    invariant: data_served
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/state.txt"
+      expect: reachable
+      status: 200
+      body_regex: '^keep-{{marker}}\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: rollout_done
+    invariant: rollout_healthy
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+
+  - id: data_bound
+    invariant: claims_intact
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: PersistentVolumeClaim, name: "{{app}}-data", namespace: "{{ns}}"}, jsonpath: '.status.phase', op: eq, value: Bound}
+
+  - id: data_pvc
+    invariant: claims_intact
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: PersistentVolumeClaim, name: "{{app}}-data", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}
+
+  - id: scratch_pvc
+    invariant: claims_intact
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: PersistentVolumeClaim, name: "{{app}}-scratch", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec.resources, .spec.accessModes], baseline: post-setup}

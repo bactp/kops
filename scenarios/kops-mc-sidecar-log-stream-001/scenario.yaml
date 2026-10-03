@@ -1,0 +1,131 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-mc-sidecar-log-stream-001
+revision: 1
+title: Add a log-streaming sidecar that shares the application's log volume
+status: validated
+family_id: PF-WKL-008
+difficulty:
+  level: 2
+  rationale: Needs a second container with the shared volume mounted; verified through the sidecar's own log stream.
+tags:
+- sidecar
+- multi-container
+- emptydir
+- logs
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-04
+    mapping_rationale: Sidecars are one of the primitives of robust application deployments.
+  ckad:
+    enabled: true
+    domain: design-build
+    primary_competency: CKAD-ADB-03
+    mapping_rationale: Multi-container Pod design patterns (sidecar).
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: side-
+    app:
+      type: choice
+      choices:
+      - batcher
+      - emitter
+      - scanner
+      - worker
+    sc:
+      type: choice
+      choices:
+      - log-streamer
+      - tail-sidecar
+      - event-forwarder
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (1 replica) writes lines 'event N' to /var/log/app/app.log on an emptyDir volume named logs. There is no sidecar.
+  fixtures:
+  - fixtures/app.yaml
+  faults:
+  - id: no_log_stream
+    category: missing-resource
+    layer: object
+    description: log file is not exposed on a container's stdout
+constraints:
+- id: keep_main
+  description: Do not change the main container.
+  enforced_by: invariant
+  invariant: main_container_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: sidecar_streams
+  kind: goal
+  required: true
+  description: A container named {{sc}} exists and its logs contain the application's event lines
+- id: main_container_unchanged
+  kind: guard
+  required: true
+  description: Main container image, command and volume mount unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - sidecar_streams
+    must_pass:
+    - main_container_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-sidecar-without-volume.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

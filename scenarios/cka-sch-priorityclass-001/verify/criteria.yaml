@@ -1,0 +1,29 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-sch-priorityclass-001
+criteria:
+  - id: pc_value
+    invariant: priorityclass_correct
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: PriorityClass, name: "{{pc}}"}, jsonpath: '.value', op: eq, value: {{val}}}
+
+  - id: pod_priority
+    invariant: pods_use_priority
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Pod, selector: "app={{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.priority', op: eq, value: {{val}}}
+
+  - id: rollout_done
+    invariant: rollout_complete
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+
+  - id: not_global
+    invariant: not_global_default
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: PriorityClass, name: "{{pc}}"}, jsonpath: '.globalDefault', op: ne, value: true}

@@ -1,0 +1,16 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-sch-taint-toleration-001
+criteria:
+  - id: placement
+    invariant: running_on_dedicated
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.placement, namespace: "{{ns}}", selector: "app={{app}}", min_pods: 2, node_selector: "dedicated={{team}}", mode: within}
+
+  - id: taint_present
+    invariant: taint_intact
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Node, selector: "dedicated={{team}}"}, jsonpath: '.spec.taints[?(@.key=="dedicated")].effect', op: eq, value: NoSchedule}

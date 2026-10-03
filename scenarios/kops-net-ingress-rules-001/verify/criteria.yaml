@@ -1,0 +1,63 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-net-ingress-rules-001
+criteria:
+  - id: class_name
+    invariant: ingress_rules_correct
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Ingress, name: "{{app}}-edge", namespace: "{{ns}}"}, jsonpath: '.spec.ingressClassName', op: eq, value: "{{class}}"}
+
+  - id: host
+    invariant: ingress_rules_correct
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Ingress, name: "{{app}}-edge", namespace: "{{ns}}"}, jsonpath: '.spec.rules[*].host', op: eq, value: "{{host}}"}
+
+  - id: api_service
+    invariant: ingress_rules_correct
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Ingress, name: "{{app}}-edge", namespace: "{{ns}}"}, jsonpath: '.spec.rules[0].http.paths[?(@.path=="/api")].backend.service.name', op: eq, value: "{{app}}-api"}
+
+  - id: api_port
+    invariant: ingress_rules_correct
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Ingress, name: "{{app}}-edge", namespace: "{{ns}}"}, jsonpath: '.spec.rules[0].http.paths[?(@.path=="/api")].backend.service.port.number', op: eq, value: 80}
+
+  - id: api_pathtype
+    invariant: ingress_rules_correct
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Ingress, name: "{{app}}-edge", namespace: "{{ns}}"}, jsonpath: '.spec.rules[0].http.paths[?(@.path=="/api")].pathType', op: eq, value: Prefix}
+
+  - id: web_service
+    invariant: ingress_rules_correct
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Ingress, name: "{{app}}-edge", namespace: "{{ns}}"}, jsonpath: '.spec.rules[0].http.paths[?(@.path=="/")].backend.service.name', op: eq, value: "{{app}}-web"}
+
+  - id: web_port
+    invariant: ingress_rules_correct
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Ingress, name: "{{app}}-edge", namespace: "{{ns}}"}, jsonpath: '.spec.rules[0].http.paths[?(@.path=="/")].backend.service.port.number', op: eq, value: 80}
+
+  - id: web_pathtype
+    invariant: ingress_rules_correct
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Ingress, name: "{{app}}-edge", namespace: "{{ns}}"}, jsonpath: '.spec.rules[0].http.paths[?(@.path=="/")].pathType', op: eq, value: Prefix}
+
+  - id: api_svc_unchanged
+    invariant: backends_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Service, name: "{{app}}-api", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}
+
+  - id: web_svc_unchanged
+    invariant: backends_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Service, name: "{{app}}-web", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}

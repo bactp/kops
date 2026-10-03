@@ -1,0 +1,33 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-ext-crd-discover-001
+criteria:
+  - id: kind
+    invariant: inventory_recorded
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "ext-inventory", namespace: "{{ns}}"}, jsonpath: '.data.kind', op: eq, value: "{{kind}}"}
+
+  - id: group
+    invariant: inventory_recorded
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "ext-inventory", namespace: "{{ns}}"}, jsonpath: '.data.apiGroup', op: eq, value: "{{grp}}.kops.example"}
+
+  - id: short
+    invariant: inventory_recorded
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "ext-inventory", namespace: "{{ns}}"}, jsonpath: '.data.shortName', op: eq, value: "{{short}}"}
+
+  - id: ready
+    invariant: inventory_recorded
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "ext-inventory", namespace: "{{ns}}"}, jsonpath: '.data.ready', op: eq, value: "{{nready}}"}
+
+  - id: four_objects
+    invariant: objects_untouched
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.count, resource: {kind: "{{kind}}", namespace: "{{ns}}"}, op: eq, value: 4}

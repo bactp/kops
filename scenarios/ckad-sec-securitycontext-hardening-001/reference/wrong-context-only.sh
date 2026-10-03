@@ -1,0 +1,2 @@
+# Must FAIL: the securityContext is applied but the app cannot write /tmp/site on a read-only root filesystem, so it crashes.
+kubectl -n {{ns}} patch deployment {{app}} -p '{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":{{uid}}},"containers":[{"name":"web","securityContext":{"readOnlyRootFilesystem":true,"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}}}'

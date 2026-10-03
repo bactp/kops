@@ -1,0 +1,144 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-res-oomkilled-limit-001
+revision: 1
+title: Stop a Deployment from being OOM-killed without removing its memory limit
+status: validated
+family_id: PF-CFG-004
+difficulty:
+  level: 2
+  rationale: The cause must be diagnosed from pod status; both removing the limit and over-provisioning are blocked by guards.
+tags:
+- resources
+- limits
+- oomkilled
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-05
+    mapping_rationale: Configuring resource limits so pods are admitted and stay running.
+  ckad:
+    enabled: true
+    domain: environment-config-security
+    primary_competency: CKAD-AEC-04
+    mapping_rationale: Define resource requirements.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: mem-
+    app:
+      type: choice
+      choices:
+      - transcoder
+      - analyzer
+      - renderer
+      - thumbnailer
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    cap:
+      type: choice
+      choices:
+      - 256Mi
+      - 320Mi
+      - 384Mi
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (2 replicas) loads a ~40 MB working set at startup and has memory limit 64Mi, so its container is OOMKilled in a loop.
+  fixtures:
+  - fixtures/deployment.yaml
+  faults:
+  - id: limit_too_low
+    category: resource-exhaustion
+    layer: object
+    description: memory limit 64Mi is below the working set
+constraints:
+- id: keep_limit
+  description: The container must keep a memory limit, and it must not exceed {{cap}}.
+  enforced_by: invariant
+  invariant: limit_within_policy
+- id: keep_replicas
+  description: Keep 2 replicas.
+  enforced_by: invariant
+  invariant: replicas_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: pods_stable
+  kind: goal
+  required: true
+  description: All pods ready and not restarting over a 20 s window
+- id: limit_within_policy
+  kind: guard
+  required: true
+  description: limits.memory exists and is at most the cap
+- id: replicas_unchanged
+  kind: guard
+  required: true
+  description: spec.replicas still 2
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - pods_stable
+    must_pass:
+    - limit_within_policy
+    - replicas_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-remove-limit.sh
+  - reference/wrong-huge-limit.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

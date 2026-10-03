@@ -1,0 +1,139 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-obs-probe-repair-001
+revision: 1
+title: Repair a readiness probe with the wrong path and a liveness probe on the wrong port
+status: validated
+family_id: PF-OBS-001
+difficulty:
+  level: 2
+  rationale: Two probe defects with different symptoms (never Ready, restarts); deleting the probes is the blocked shortcut.
+tags:
+- probes
+- readiness
+- liveness
+- endpoints
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-04
+    mapping_rationale: Health probes are part of robust, self-healing deployments.
+  ckad:
+    enabled: true
+    domain: observability-maintenance
+    primary_competency: CKAD-AOM-02
+    mapping_rationale: Implement probes and health checks.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: hc-
+    app:
+      type: choice
+      choices:
+      - quotes
+      - avatars
+      - metrics-api
+      - sitemap
+    port:
+      type: port
+      min: 8000
+      max: 8499
+    port2:
+      type: port
+      min: 8500
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (2 replicas) serves /healthz on {{port}}. Readiness probe requests /ready (404, never Ready); liveness probe checks TCP {{port2}} (closed), so containers are killed repeatedly.
+  fixtures:
+  - fixtures/svc.yaml
+  - fixtures/web.yaml
+  faults:
+  - id: readiness_wrong_path
+    category: misconfiguration
+    layer: object
+    description: readiness path /ready does not exist
+  - id: liveness_wrong_port
+    category: misconfiguration
+    layer: object
+    description: liveness tcpSocket port {{port2}} is not open
+constraints:
+- id: keep_probes
+  description: Keep both a readiness and a liveness probe.
+  enforced_by: invariant
+  invariant: probes_kept
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: healthy_and_routable
+  kind: goal
+  required: true
+  description: Both pods Ready without restarts and the Service has 2 ready endpoints
+- id: probes_kept
+  kind: guard
+  required: true
+  description: Readiness and liveness probes still exist
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - healthy_and_routable
+    must_pass:
+    - probes_kept
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-remove-probes.sh
+  - reference/wrong-readiness-only.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

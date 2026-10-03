@@ -1,0 +1,41 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: ckad-deploy-canary-share-001
+criteria:
+  - id: one_canary_pod
+    invariant: canary_gets_a_quarter
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.count, resource: {kind: Pod, selector: "app={{app}},track=canary", namespace: "{{ns}}"}, field_filter: ".status.containerStatuses[0].ready==true", op: eq, value: 1}
+
+  - id: three_stable_pods
+    invariant: canary_gets_a_quarter
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.count, resource: {kind: Pod, selector: "app={{app}},track=stable", namespace: "{{ns}}"}, field_filter: ".status.containerStatuses[0].ready==true", op: eq, value: 3}
+
+  - id: selector_open
+    invariant: canary_in_endpoints
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Service, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.selector.track', op: absent}
+
+  - id: stable_uid
+    invariant: objects_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{app}}-stable", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid], baseline: post-setup}
+
+  - id: canary_uid
+    invariant: objects_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{app}}-canary", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid], baseline: post-setup}
+
+  - id: svc_uid
+    invariant: objects_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Service, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid], baseline: post-setup}

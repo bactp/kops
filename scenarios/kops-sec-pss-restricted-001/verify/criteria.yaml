@@ -1,0 +1,38 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-sec-pss-restricted-001
+criteria:
+  - id: rollout_done
+    invariant: app_running
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+
+  - id: pods_running
+    invariant: app_running
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.count, resource: {kind: Pod, selector: "app={{app}}", namespace: "{{ns}}"}, field_filter: ".status.phase==Running", op: eq, value: 2}
+
+  - id: serves_http
+    invariant: app_serves
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^restricted-ok\s*$'
+      attempts: 5
+      timeout_seconds: 3
+
+  - id: enforce_label
+    invariant: policy_intact
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Namespace, name: "{{ns}}"}, jsonpath: '.metadata.labels["pod-security.kubernetes.io/enforce"]', op: eq, value: restricted}

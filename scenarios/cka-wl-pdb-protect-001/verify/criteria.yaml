@@ -1,0 +1,23 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-wl-pdb-protect-001
+criteria:
+  - id: pdb_selects_four
+    invariant: pdb_effective
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: PodDisruptionBudget, name: "{{app}}-pdb", namespace: "{{ns}}"}, jsonpath: '.status.expectedPods', op: eq, value: 4}
+
+  - id: pdb_allows_one
+    invariant: pdb_effective
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: PodDisruptionBudget, name: "{{app}}-pdb", namespace: "{{ns}}"}, jsonpath: '.status.disruptionsAllowed', op: eq, value: 1}
+
+  - id: workload
+    invariant: workload_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}

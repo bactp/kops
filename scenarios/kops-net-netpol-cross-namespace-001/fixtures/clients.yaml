@@ -1,0 +1,56 @@
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: client
+   namespace: {{ns}}
+ spec:
+   replicas: 1
+   selector:
+     matchLabels: {app: client}
+   template:
+     metadata:
+       labels: {app: client}
+     spec:
+       containers:
+         - name: c
+           image: busybox:1.36.1
+           imagePullPolicy: IfNotPresent
+           command: ["sleep", "3600"]
+---
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: client
+   namespace: {{ns}}-partner
+ spec:
+   replicas: 1
+   selector:
+     matchLabels: {app: client}
+   template:
+     metadata:
+       labels: {app: client}
+     spec:
+       containers:
+         - name: c
+           image: busybox:1.36.1
+           imagePullPolicy: IfNotPresent
+           command: ["sleep", "3600"]
+---
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: client
+   namespace: {{ns}}-other
+ spec:
+   replicas: 1
+   selector:
+     matchLabels: {app: client}
+   template:
+     metadata:
+       labels: {app: client}
+     spec:
+       containers:
+         - name: c
+           image: busybox:1.36.1
+           imagePullPolicy: IfNotPresent
+           command: ["sleep", "3600"]

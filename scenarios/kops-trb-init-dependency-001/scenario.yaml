@@ -1,0 +1,147 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-trb-init-dependency-001
+revision: 1
+title: Unblock a pod stuck in an init container that waits for a Service that does not exist
+status: validated
+family_id: PF-WKL-009
+difficulty:
+  level: 2
+  rationale: Pods are stuck in Init; the init logs name the missing dependency; a lookalike Service with no endpoints and removing the init container are blocked.
+tags:
+- init-containers
+- service
+- dependencies
+- logs
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-04
+    mapping_rationale: Init containers gate start-up of robust deployments.
+  ckad:
+    enabled: true
+    domain: design-build
+    primary_competency: CKAD-ADB-03
+    mapping_rationale: 'Multi-container design patterns: init containers.'
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: init-
+    app:
+      type: choice
+      choices:
+      - reports-ui
+      - dashboard
+      - console
+      - portal
+    port:
+      type: port
+      min: 8000
+      max: 8499
+    dep:
+      type: choice
+      choices:
+      - ledger-db
+      - metrics-store
+      - auth-core
+      - queue-hub
+    dport:
+      type: port
+      min: 8500
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Backend Deployment {{dep}}-server (port {{dport}}) exists with no Service. Deployment {{app}} (2 replicas) has an init container that waits until {{dep}}:{{dport}} answers; pods are stuck in Init:0/1.
+  fixtures:
+  - fixtures/backend.yaml
+  - fixtures/app.yaml
+  faults:
+  - id: missing_dependency_service
+    category: missing-resource
+    layer: object
+    description: Service {{dep}} does not exist
+constraints:
+- id: keep_init
+  description: Do not remove or alter the init container, and do not touch the backend Deployment.
+  enforced_by: invariant
+  invariant: gate_kept
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: app_running
+  kind: goal
+  required: true
+  description: Both app pods Running and Ready
+- id: dependency_routable
+  kind: goal
+  required: true
+  description: Service {{dep}} has a ready endpoint on port {{dport}}
+- id: gate_kept
+  kind: guard
+  required: true
+  description: Init container and backend Deployment unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - app_running
+    - dependency_routable
+    must_pass:
+    - gate_kept
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-remove-init.sh
+  - reference/wrong-lookalike-service.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

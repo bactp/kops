@@ -1,0 +1,113 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-arc-extension-interfaces-report-001
+revision: 1
+title: Identify the runtime, networking and storage extension interfaces of the cluster
+status: validated
+family_id: PF-EXT-003
+difficulty:
+  level: 2
+  rationale: 'Diagnosis-only task about CRI/CNI/CSI: facts are read from node info, the networking DaemonSet and the StorageClass, and compared with live state.'
+tags:
+- cri
+- cni
+- csi
+- extension-interfaces
+- diagnosis
+profiles:
+  cka:
+    enabled: true
+    domain: cluster-architecture
+    primary_competency: CKA-ARC-07
+    mapping_rationale: Understanding extension interfaces (CRI, CNI, CSI) from what the cluster exposes through the API.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: ifc-
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: 'Plain kind cluster: containerd runtime, kindnet as CNI DaemonSet, StorageClass standard provisioned by rancher.io/local-path. No ConfigMap exists.'
+  fixtures: []
+  faults:
+  - id: none
+    category: none
+    layer: object
+    description: diagnosis task; nothing to repair
+constraints:
+- id: read_only
+  description: Do not modify anything in kube-system.
+  enforced_by: invariant
+  invariant: kube_system_untouched
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: interfaces_reported
+  kind: goal
+  required: true
+  description: ConfigMap cluster-interfaces records the runtime version string, the CNI DaemonSet name, the provisioner of the default StorageClass and the kubelet version
+- id: kube_system_untouched
+  kind: guard
+  required: true
+  description: The CNI DaemonSet and the default StorageClass are unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - interfaces_reported
+    must_pass:
+    - kube_system_untouched
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

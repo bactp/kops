@@ -1,0 +1,126 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-wl-pdb-protect-001
+revision: 1
+title: Protect a Deployment during voluntary disruptions with a PodDisruptionBudget
+status: validated
+family_id: PF-WKL-012
+difficulty:
+  level: 1
+  rationale: Single object creation, but the pods are labelled with a non-obvious key, so the selector must be read from the workload.
+tags:
+- pdb
+- availability
+- labels
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-04
+    mapping_rationale: PodDisruptionBudgets contribute to robust, self-healing application deployments.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: ha-
+    app:
+      type: choice
+      choices:
+      - ingest
+      - payments
+      - notifier
+      - indexer
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (4 replicas) labelled component={{app}} (no app label). No PodDisruptionBudget.
+  fixtures:
+  - fixtures/web.yaml
+  faults:
+  - id: no_pdb
+    category: missing-resource
+    layer: object
+    description: voluntary evictions are unrestricted
+constraints:
+- id: keep_workload
+  description: Do not modify the Deployment.
+  enforced_by: invariant
+  invariant: workload_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: pdb_effective
+  kind: goal
+  required: true
+  description: A PDB named {{app}}-pdb covers the 4 pods and allows exactly 1 voluntary disruption
+- id: workload_unchanged
+  kind: guard
+  required: true
+  description: Deployment template and replicas unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - pdb_effective
+    must_pass:
+    - workload_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-wrong-selector.sh
+  - reference/wrong-too-strict.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

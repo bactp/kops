@@ -1,0 +1,44 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-net-kubeproxy-rollout-undo-001
+criteria:
+  - id: http_clusterip
+    invariant: service_reachable
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^kp-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: ds_ready
+    invariant: kube_proxy_running
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: DaemonSet, name: kube-proxy, namespace: kube-system}, jsonpath: '.status.numberReady', op: gte, value: 1}
+
+  - id: ds_image
+    invariant: kube_proxy_running
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: DaemonSet, name: kube-proxy, namespace: kube-system}, jsonpath: '.spec.template.spec.containers[0].image', op: regex, value: 'kube-proxy:v1\.35\.[0-9]+$'}
+
+  - id: ds_uid
+    invariant: kube_proxy_objects_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: DaemonSet, name: kube-proxy, namespace: kube-system}, scope: jsonpaths, jsonpaths: [.metadata.uid], baseline: post-setup}
+
+  - id: cm_uid
+    invariant: kube_proxy_objects_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: ConfigMap, name: kube-proxy, namespace: kube-system}, scope: jsonpaths, jsonpaths: [.metadata.uid, .data], baseline: post-setup}

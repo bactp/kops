@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app}}
+  namespace: {{ns}}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: {{app}}}
+  template:
+    metadata:
+      labels: {app: {{app}}}
+    spec:
+      containers:
+        - name: web
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /tmp/site
+              echo "uid=$(id -u) nnp=$(grep NoNewPrivs /proc/self/status | cut -f2) capbnd=$(grep CapBnd /proc/self/status | cut -f2) rootfs=$(touch /probe-rw 2>/dev/null && echo rw || echo ro)" > /tmp/site/index.html
+              echo ok > /tmp/site/healthz
+              exec httpd -f -p {{port}} -h /tmp/site
+          readinessProbe:
+            httpGet: {path: /healthz, port: {{port}}}
+            periodSeconds: 2

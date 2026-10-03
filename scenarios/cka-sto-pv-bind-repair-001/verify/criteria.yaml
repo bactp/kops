@@ -1,0 +1,36 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-sto-pv-bind-repair-001
+criteria:
+  - id: claim_phase
+    invariant: claim_bound_to_prepared_volume
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: PersistentVolumeClaim, name: "{{app}}-claim", namespace: "{{ns}}"}, jsonpath: '.status.phase', op: eq, value: Bound}
+
+  - id: claim_volume
+    invariant: claim_bound_to_prepared_volume
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: PersistentVolumeClaim, name: "{{app}}-claim", namespace: "{{ns}}"}, jsonpath: '.spec.volumeName', op: eq, value: "{{app}}-vol"}
+
+  - id: rollout_done
+    invariant: app_running
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+
+  - id: claim_spec
+    invariant: claim_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: PersistentVolumeClaim, name: "{{app}}-claim", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec.resources, .spec.accessModes, .spec.storageClassName], baseline: post-setup}
+
+  - id: pv_identity
+    invariant: volume_retained
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: PersistentVolume, name: "{{app}}-vol"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec.persistentVolumeReclaimPolicy], baseline: post-setup}

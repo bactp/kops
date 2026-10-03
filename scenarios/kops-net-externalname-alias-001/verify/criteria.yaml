@@ -1,0 +1,42 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-net-externalname-alias-001
+criteria:
+  - id: alias_http
+    invariant: alias_works
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: "{{ns}}", labels: {app: client}}
+      url: "http://{{alias}}/"
+      expect: reachable
+      status: 200
+      body_regex: '^alias-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: alias_type
+    invariant: alias_is_externalname
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Service, name: "{{alias}}", namespace: "{{ns}}"}, jsonpath: '.spec.type', op: eq, value: ExternalName}
+
+  - id: alias_target
+    invariant: alias_is_externalname
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Service, name: "{{alias}}", namespace: "{{ns}}"}, jsonpath: '.spec.externalName', op: regex, value: '^{{svc}}\.{{ns}}-data\.svc(\.cluster\.local)?\.?$'}
+
+  - id: backend_dep
+    invariant: backend_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{svc}}", namespace: "{{ns}}-data"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}
+
+  - id: backend_svc
+    invariant: backend_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Service, name: "{{svc}}", namespace: "{{ns}}-data"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}

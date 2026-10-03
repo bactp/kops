@@ -1,0 +1,39 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-cfg-configmap-ref-repair-001
+criteria:
+  - id: page_values
+    invariant: app_uses_configmap_values
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^{{level}} {{mode}}\s*$'
+      attempts: 5
+      timeout_seconds: 3
+  - id: rollout_done
+    invariant: rollout_healthy
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+  - id: configmap_data
+    invariant: configmap_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: ConfigMap, name: "{{app}}-settings", namespace: "{{ns}}"}, scope: data, baseline: post-setup}
+  - id: setting_not_literal
+    invariant: no_hardcoded_values
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].env[?(@.name=="SETTING")].value', op: absent}
+  - id: mode_not_literal
+    invariant: no_hardcoded_values
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].env[?(@.name=="MODE")].value', op: absent}

@@ -1,0 +1,152 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-trb-node-unschedulable-001
+revision: 1
+title: 'Bring back worker capacity: one node is cordoned, the other tainted, and pods are Pending'
+status: validated
+family_id: PF-NOD-005
+difficulty:
+  level: 2
+  rationale: Two different mechanisms hide the same symptom; adding tolerations or removing the control-plane taint are tempting shortcuts that guards block.
+tags:
+- nodes
+- cordon
+- taints
+- pending
+- capacity
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-01
+    mapping_rationale: 'Troubleshooting nodes: why no node accepts pods (API-level; node-process faults are in the backlog).'
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 2
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: cap-
+    app:
+      type: choice
+      choices:
+      - worker-pool
+      - reports-api
+      - scheduler-ui
+      - etl-batch
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    key:
+      type: choice
+      choices:
+      - ops.example/hold
+      - team.example/freeze
+      - infra.example/pause
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Worker 1 is cordoned; worker 2 carries taint {{key}}=true:NoSchedule; both are labelled hold=cordon / hold=taint. Deployment {{app}} (4 replicas) is all Pending.
+  fixtures:
+  - fixtures/web.yaml
+  faults:
+  - id: node_cordoned
+    category: scheduling-constraint
+    layer: node
+    description: worker 1 unschedulable
+  - id: node_tainted
+    category: scheduling-constraint
+    layer: node
+    description: worker 2 NoSchedule taint
+constraints:
+- id: keep_cp_taint
+  description: Keep the control-plane taint.
+  enforced_by: invariant
+  invariant: controlplane_taint_kept
+- id: keep_deployment
+  description: Do not change the Deployment.
+  enforced_by: invariant
+  invariant: deployment_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: workers_schedulable
+  kind: goal
+  required: true
+  description: Neither worker is unschedulable nor carries the hold taint
+- id: pods_running
+  kind: goal
+  required: true
+  description: All 4 replicas Running
+- id: controlplane_taint_kept
+  kind: guard
+  required: true
+  description: Control-plane node still has its NoSchedule taint
+- id: deployment_unchanged
+  kind: guard
+  required: true
+  description: Deployment spec unchanged (no tolerations added)
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - workers_schedulable
+    - pods_running
+    must_pass:
+    - controlplane_taint_kept
+    - deployment_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-toleration-and-uncordon.sh
+  - reference/wrong-open-the-control-plane.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

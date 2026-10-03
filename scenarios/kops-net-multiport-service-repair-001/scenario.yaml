@@ -1,0 +1,145 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-net-multiport-service-repair-001
+revision: 1
+title: 'Repair a two-port Service: one targetPort name does not exist, the other number is wrong'
+status: validated
+family_id: PF-NET-003
+difficulty:
+  level: 2
+  rationale: Each port has a different defect (named port that the container does not declare, numeric port that nothing listens on); endpoints are checked per port.
+tags:
+- service
+- named-port
+- targetport
+- endpoints
+- multi-port
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-05
+    mapping_rationale: Troubleshooting Service routing for several ports.
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-02
+    mapping_rationale: Troubleshooting access to applications via Services.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: mp-
+    app:
+      type: choice
+      choices:
+      - console
+      - directory
+      - broker
+      - relay
+    port:
+      type: port
+      min: 8000
+      max: 8499
+    port2:
+      type: port
+      min: 8500
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (2 replicas) declares container ports http={{port}} and admin={{port2}}. Service {{app}} exposes 80 -> targetPort "web-http" (no such name) and 9090 -> targetPort {{port}} (wrong number; admin is on {{port2}}).
+  fixtures:
+  - fixtures/web.yaml
+  - fixtures/service.yaml
+  faults:
+  - id: unknown_named_port
+    category: wrong-reference
+    layer: object
+    description: targetPort name web-http is not declared by the container
+  - id: wrong_numeric_port
+    category: misconfiguration
+    layer: object
+    description: admin port maps to the http port number
+constraints:
+- id: keep_service
+  description: Keep the Service name and ClusterIP; do not change the Deployment.
+  enforced_by: invariant
+  invariant: objects_preserved
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: both_ports_serve
+  kind: goal
+  required: true
+  description: Port 80 returns the main page and port 9090 returns the admin page
+- id: both_ports_have_endpoints
+  kind: goal
+  required: true
+  description: The admin Service port has 2 ready endpoints on the admin container port
+- id: objects_preserved
+  kind: guard
+  required: true
+  description: Service UID/ClusterIP and Deployment template unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - both_ports_serve
+    - both_ports_have_endpoints
+    must_pass:
+    - objects_preserved
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-first-port-only.sh
+  - reference/wrong-recreate-service.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: "{{app}}-settings", namespace: "{{ns}}"}
+data:
+  log_level: "{{level}}"
+  mode: "{{mode}}"

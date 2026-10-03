@@ -1,0 +1,45 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-wl-hpa-spec-001
+criteria:
+  - id: target
+    invariant: hpa_configured
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: HorizontalPodAutoscaler, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.scaleTargetRef.name', op: eq, value: "{{app}}"}
+
+  - id: target_kind
+    invariant: hpa_configured
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: HorizontalPodAutoscaler, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.scaleTargetRef.kind', op: eq, value: Deployment}
+
+  - id: min
+    invariant: hpa_configured
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: HorizontalPodAutoscaler, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.minReplicas', op: eq, value: {{min}}}
+
+  - id: max
+    invariant: hpa_configured
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: HorizontalPodAutoscaler, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.maxReplicas', op: eq, value: {{max}}}
+
+  - id: cpu_target
+    invariant: hpa_configured
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: HorizontalPodAutoscaler, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.metrics[?(@.type=="Resource")].resource.target.averageUtilization', op: eq, value: {{cpu}}}
+
+  - id: cpu_request
+    invariant: target_eligible
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].resources.requests.cpu', op: exists}
+
+  - id: deployment_uid
+    invariant: deployment_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid], baseline: post-setup}

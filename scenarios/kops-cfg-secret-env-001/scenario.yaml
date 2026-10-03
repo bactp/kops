@@ -1,0 +1,149 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-cfg-secret-env-001
+revision: 1
+title: Create a credentials Secret and inject it into a Deployment without literals
+status: validated
+family_id: PF-CFG-002
+difficulty:
+  level: 2
+  rationale: Combines object creation with consumption; literal env values are a tempting shortcut that the guard blocks.
+tags:
+- secret
+- env
+- create
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-02
+    mapping_rationale: Creating a Secret and consuming it from a workload.
+  ckad:
+    enabled: true
+    domain: environment-config-security
+    primary_competency: CKAD-AEC-06
+    mapping_rationale: Create and consume Secrets.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: sec-
+    app:
+      type: choice
+      choices:
+      - billing
+      - reports
+      - syncer
+      - auditor
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    user:
+      type: choice
+      choices:
+      - svc-reader
+      - app-rw
+      - etl-agent
+      - metrics-ro
+    pw:
+      type: choice
+      choices:
+      - Zq7-lantern-41
+      - orbit_Cedar_93
+      - maple.River.58
+      - tundra#Quill27
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} authenticates against an imaginary backend using env DB_USERNAME and DB_PASSWORD; with missing variables its page says auth-denied. It will say auth-ok only if the variables equal {{user}} / {{pw}}. No Secret exists yet.
+  fixtures:
+  - fixtures/service.yaml
+  - fixtures/deployment.yaml
+  faults:
+  - id: missing_secret
+    category: missing-resource
+    layer: object
+    description: No Secret and no env wiring exist; application reports auth-denied
+constraints:
+- id: no_literals
+  description: The password must not appear as a literal in the Deployment.
+  enforced_by: invariant
+  invariant: no_plaintext_password
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: auth_ok
+  kind: goal
+  required: true
+  description: Application page reports auth-ok
+- id: secret_has_keys
+  kind: goal
+  required: true
+  description: A Secret holds keys username and password
+- id: no_plaintext_password
+  kind: guard
+  required: true
+  description: No env entry of the Deployment has a literal value for DB_PASSWORD or DB_USERNAME
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - auth_ok
+    - secret_has_keys
+    must_pass:
+    - no_plaintext_password
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-literal-env.sh
+  - reference/wrong-secret-only.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

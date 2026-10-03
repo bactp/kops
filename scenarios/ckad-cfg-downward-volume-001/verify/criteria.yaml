@@ -1,0 +1,45 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: ckad-cfg-downward-volume-001
+criteria:
+  - id: labels_file
+    invariant: labels_file_served
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/labels"
+      expect: reachable
+      status: 200
+      body_regex: 'app="{{app}}"'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: namespace_file
+    invariant: namespace_file_served
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/namespace"
+      expect: reachable
+      status: 200
+      body_regex: '^{{ns}}$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: image
+    invariant: mount_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].image', op: eq, value: busybox:1.36.1}
+
+  - id: mount_path
+    invariant: mount_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].volumeMounts[0].mountPath', op: eq, value: /etc/podinfo}

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app}}-blue
+  namespace: {{ns}}
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: {{app}}, track: blue}
+  template:
+    metadata:
+      labels: {app: {{app}}, track: blue}
+    spec:
+      containers:
+        - name: web
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "mkdir -p /tmp/w && echo blue-{{v1}} > /tmp/w/index.html && exec httpd -f -p {{port}} -h /tmp/w"]
+          readinessProbe:
+            tcpSocket: {port: {{port}}}
+            periodSeconds: 2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app}}-green
+  namespace: {{ns}}
+spec:
+  replicas: 0
+  selector:
+    matchLabels: {app: {{app}}, track: green}
+  template:
+    metadata:
+      labels: {app: {{app}}, track: green}
+    spec:
+      containers:
+        - name: web
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "mkdir -p /tmp/w && echo green-{{v2}} > /tmp/w/index.html && exec httpd -f -p {{port}} -h /tmp/w"]
+          readinessProbe:
+            tcpSocket: {port: {{port}}}
+            periodSeconds: 2

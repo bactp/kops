@@ -1,0 +1,51 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-obs-probe-repair-001
+criteria:
+  - id: endpoints_two
+    invariant: healthy_and_routable
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.endpoints, service: "{{app}}", namespace: "{{ns}}", min_ready: 2, port: {{port}}}
+
+  - id: no_restarts_stable
+    invariant: healthy_and_routable
+    required: true
+    settle: true
+    failure_class: unstable
+    check: {type: stability, window_seconds: 30, samples: 6, check: {type: k8s.count, resource: {kind: Pod, selector: "app={{app}}", namespace: "{{ns}}"}, field_filter: ".status.containerStatuses[0].restartCount==0", op: eq, value: 2}}
+
+  - id: no_restarts_final
+    invariant: healthy_and_routable
+    required: true
+    settle: true
+    failure_class: unstable
+    check: {type: k8s.field, resource: {kind: Pod, selector: "app={{app}}", namespace: "{{ns}}"}, jsonpath: ".status.containerStatuses[0].restartCount", op: lte, value: 0}
+
+  - id: http_ok
+    invariant: healthy_and_routable
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^up\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: readiness_kept
+    invariant: probes_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].readinessProbe', op: exists}
+
+  - id: liveness_kept
+    invariant: probes_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].livenessProbe', op: exists}

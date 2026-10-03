@@ -1,0 +1,31 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-trb-startup-cascade-001
+criteria:
+  - id: greeting
+    invariant: app_serves_greeting
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^{{greet}}\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: rollout_done
+    invariant: rollout_healthy
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+
+  - id: config_data
+    invariant: configmap_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: ConfigMap, name: "{{app}}-conf", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .data], baseline: post-setup}

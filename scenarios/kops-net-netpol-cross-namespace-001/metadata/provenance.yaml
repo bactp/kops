@@ -1,0 +1,53 @@
+competency_source:
+- certification: CKA
+  curriculum_version: v1.35
+  domain: Servicing and Networking
+  competency_id: CKA-NET-02
+  competency: Define and enforce Network Policies
+- certification: CKAD
+  curriculum_version: v1.35
+  domain: Services and Networking
+  competency_id: CKAD-SNW-01
+  competency: Demonstrate basic understanding of NetworkPolicies
+design_references:
+- repository: grindxhq-cka
+  license: Apache-2.0
+  used_for: problem-family-idea
+  notes: topic label only, via docs/problem-family-catalog.yaml PF-NET-004; no text, code or manifests used
+- repository: k16s
+  license: PolyForm-Noncommercial-1.0.0
+  used_for: problem-family-idea
+  notes: topic label only, via docs/problem-family-catalog.yaml PF-NET-004; no text, code or manifests used
+- repository: ck-x
+  license: BSL-1.1 (MIT before 2026-05-09)
+  used_for: problem-family-idea
+  notes: topic label only, via docs/problem-family-catalog.yaml PF-NET-004; no text, code or manifests used
+- repository: cka-hand-on-lab
+  license: MIT
+  used_for: problem-family-idea
+  notes: topic label only, via docs/problem-family-catalog.yaml PF-NET-004; no text, code or manifests used
+- repository: ckad-exams
+  license: none (no LICENSE file)
+  used_for: problem-family-idea
+  notes: topic label only, via docs/problem-family-catalog.yaml PF-NET-004; no text, code or manifests used
+- repository: kubernetes.io documentation
+  license: CC-BY-4.0
+  used_for: none
+  notes: task and fixtures written from the concept pages listed in upstream_docs
+upstream_docs:
+- https://kubernetes.io/docs/concepts/services-networking/network-policies/#networkpolicy-and-namespaceselector
+copied_question: false
+copied_code: []
+authoring:
+  method: human-original-llm-assisted
+  authors:
+  - kops-a2-team
+  date: '2026-10-02'
+contamination_review:
+  reviewer: TBD
+  date: '2026-10-02'
+  checks:
+    no_exam_dump_source: true
+    no_quarantined_repo_text: true
+    fingerprint_scan_clean: true
+    max_ngram_overlap: 0.0

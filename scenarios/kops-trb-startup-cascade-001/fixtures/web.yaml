@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app}}
+  namespace: {{ns}}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: {{app}}}
+  template:
+    metadata:
+      labels: {app: {{app}}}
+    spec:
+      serviceAccountName: "{{sa}}"
+      containers:
+        - name: web
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "exec httpd -f -p {{port}} -h /etc/site"]
+          volumeMounts:
+            - {name: site, mountPath: /etc/site}
+          readinessProbe:
+            tcpSocket: {port: {{port}}}
+            periodSeconds: 2
+      volumes:
+        - name: site
+          configMap: {name: "{{app}}-config"}

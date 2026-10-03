@@ -1,0 +1,145 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-job-cronjob-repair-001
+revision: 1
+title: Repair a CronJob template and trigger a one-off run from it
+status: validated
+family_id: PF-WKL-006
+difficulty:
+  level: 2
+  rationale: The CronJob's job template references a missing image; the fix must land in the CronJob (not in an ad-hoc Job) and a run must be proven with 'create job --from'.
+tags:
+- cronjob
+- job
+- image
+- create-job-from
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-04
+    mapping_rationale: CronJobs and Jobs are workload primitives; repairing a template is part of keeping them running.
+  ckad:
+    enabled: true
+    domain: design-build
+    primary_competency: CKAD-ADB-02
+    mapping_rationale: Choosing and operating the right workload resource (CronJob/Job).
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: batch-
+    app:
+      type: choice
+      choices:
+      - nightly
+      - invoice
+      - digest
+      - cleanup
+    job:
+      type: choice
+      choices:
+      - adhoc-run
+      - manual-1
+      - rerun-now
+      - smoke-check
+    marker:
+      type: choice
+      choices:
+      - report-9f3a
+      - report-7c21
+      - report-b410
+      - report-e55d
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: CronJob {{app}}-report (schedule 0 0 1 1 *, concurrencyPolicy Forbid) uses image busybox:1.36.11, which does not exist, so any Job it spawns hangs in ImagePullBackOff.
+  fixtures:
+  - fixtures/cronjob.yaml
+  faults:
+  - id: bad_image_in_template
+    category: image
+    layer: object
+    description: jobTemplate image tag does not exist
+constraints:
+- id: keep_cron_settings
+  description: Keep the schedule and concurrency policy.
+  enforced_by: invariant
+  invariant: cron_settings_kept
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: cronjob_template_fixed
+  kind: goal
+  required: true
+  description: The CronJob's container image is busybox:1.36.1
+- id: manual_run_completed
+  kind: goal
+  required: true
+  description: Job {{job}} created from the CronJob completed and printed the report line
+- id: cron_settings_kept
+  kind: guard
+  required: true
+  description: Schedule, concurrencyPolicy and UID of the CronJob unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - cronjob_template_fixed
+    - manual_run_completed
+    must_pass:
+    - cron_settings_kept
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-adhoc-job-only.sh
+  - reference/wrong-run-before-fix.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

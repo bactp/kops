@@ -1,0 +1,135 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-sec-pss-restricted-001
+revision: 1
+title: Make a Deployment admissible under a Pod Security restricted namespace
+status: validated
+family_id: PF-SEC-006
+difficulty:
+  level: 2
+  rationale: Requires reading the admission rejection message and fixing the pod spec; relaxing the namespace label is the blocked shortcut.
+tags:
+- pod-security
+- admission
+- restricted
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-05
+    mapping_rationale: Pod admission is part of configuring Pod admission and scheduling.
+  ckad:
+    enabled: true
+    domain: environment-config-security
+    primary_competency: CKAD-AEC-02
+    mapping_rationale: Admission control (Pod Security Admission) is part of authn/authz/admission.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: psa-
+    app:
+      type: choice
+      choices:
+      - intake
+      - cruncher
+      - frontdoor
+      - ingest
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Namespace {{ns}} enforces pod-security.kubernetes.io/enforce=restricted. Deployment {{app}} (2 replicas) has no securityContext, so every pod is rejected at admission.
+  fixtures:
+  - fixtures/service.yaml
+  - fixtures/deployment.yaml
+  faults:
+  - id: psa_violation
+    category: misconfiguration
+    layer: object
+    description: pod spec violates the restricted profile
+constraints:
+- id: keep_policy
+  description: Do not weaken the namespace's Pod Security labels.
+  enforced_by: invariant
+  invariant: policy_intact
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: app_running
+  kind: goal
+  required: true
+  description: Both replicas are running and ready
+- id: app_serves
+  kind: goal
+  required: true
+  description: Service answers HTTP 200
+- id: policy_intact
+  kind: guard
+  required: true
+  description: Namespace still enforces the restricted profile
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - app_running
+    - app_serves
+    must_pass:
+    - policy_intact
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-relax-namespace.sh
+  - reference/wrong-partial-context.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

@@ -1,0 +1,154 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-wl-rollout-pause-batch-001
+revision: 1
+title: Batch three pod-template changes into a single rollout
+status: validated
+family_id: PF-WKL-002
+difficulty:
+  level: 2
+  rationale: Each kubectl set command would trigger its own rollout; pausing first yields exactly one new revision, which the revision annotation proves.
+tags:
+- deployment
+- rollout
+- pause
+- resume
+- revision
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-01
+    mapping_rationale: Controlling rolling updates (pause/resume) and revisions.
+  ckad:
+    enabled: true
+    domain: deployment
+    primary_competency: CKAD-ADP-02
+    mapping_rationale: Performing rolling updates deliberately.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: roll-
+    app:
+      type: choice
+      choices:
+      - pricing
+      - sessions
+      - feed
+      - mailer
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    sa:
+      type: choice
+      choices:
+      - rollout-sa
+      - svc-runtime
+      - app-identity
+    msg:
+      type: choice
+      choices:
+      - release-r12
+      - release-r13
+      - release-r14
+    cpu:
+      type: choice
+      choices:
+      - 200m
+      - 300m
+      - 400m
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (3 replicas, revision 1) is healthy. ServiceAccount {{sa}} exists. The three changes (env MSG, cpu limit, serviceAccount) should reach pods as one revision.
+  fixtures:
+  - fixtures/web.yaml
+  faults:
+  - id: none
+    category: none
+    layer: object
+    description: 'behavioural requirement: exactly one new rollout'
+constraints:
+- id: not_paused
+  description: The Deployment must not be left paused.
+  enforced_by: invariant
+  invariant: rollout_not_paused
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: changes_applied
+  kind: goal
+  required: true
+  description: Template has MSG={{msg}}, cpu limit {{cpu}}, serviceAccountName {{sa}}
+- id: single_revision
+  kind: goal
+  required: true
+  description: Exactly one new revision (revision annotation is 2)
+- id: rollout_not_paused
+  kind: guard
+  required: true
+  description: Deployment is not paused and the rollout is complete
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - changes_applied
+    - single_revision
+    must_pass:
+    - rollout_not_paused
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-three-rollouts.sh
+  - reference/wrong-left-paused.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

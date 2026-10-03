@@ -1,0 +1,33 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-sto-default-class-001
+criteria:
+  - id: sc_is_default
+    invariant: new_default
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: StorageClass, name: "{{sc}}"}, jsonpath: '.metadata.annotations["storageclass.kubernetes.io/is-default-class"]', op: eq, value: "true"}
+
+  - id: one_default
+    invariant: exactly_one_default
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.count, resource: {kind: StorageClass}, field_filter: ".metadata.annotations['storageclass.kubernetes.io/is-default-class']==true", op: eq, value: 1}
+
+  - id: standard_not_default
+    invariant: single_default
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: StorageClass, name: standard}, jsonpath: ".metadata.annotations['storageclass.kubernetes.io/is-default-class']", op: ne, value: "true"}
+
+  - id: standard_exists
+    invariant: classes_present
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.exists, resource: {kind: StorageClass, name: standard}, expect: present}
+
+  - id: new_exists
+    invariant: classes_present
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.exists, resource: {kind: StorageClass, name: "{{sc}}"}, expect: present}

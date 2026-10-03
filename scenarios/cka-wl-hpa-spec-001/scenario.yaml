@@ -1,0 +1,153 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-wl-hpa-spec-001
+revision: 1
+title: Configure a HorizontalPodAutoscaler and make the workload eligible for it
+status: validated
+family_id: PF-WKL-011
+difficulty:
+  level: 2
+  rationale: 'HPA needs CPU requests on the target; the object and the prerequisite are both checked. Spec-only: no metrics pipeline exists, so scaling behaviour is not exercised.'
+tags:
+- hpa
+- autoscaling
+- requests
+- spec-only
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-03
+    mapping_rationale: Configure workload autoscaling (spec-level on this backend).
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: scale-
+    app:
+      type: choice
+      choices:
+      - api
+      - frontend
+      - worker
+      - gateway
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    min:
+      type: choice
+      choices:
+      - 2
+      - 3
+    max:
+      type: choice
+      choices:
+      - 6
+      - 8
+      - 10
+    cpu:
+      type: choice
+      choices:
+      - 55
+      - 65
+      - 75
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (2 replicas) has no resource requests and there is no HPA.
+  fixtures:
+  - fixtures/web.yaml
+  faults:
+  - id: no_hpa
+    category: missing-resource
+    layer: object
+    description: no autoscaler
+  - id: no_requests
+    category: misconfiguration
+    layer: object
+    description: container has no CPU request, so utilisation targets cannot work
+constraints:
+- id: keep_deployment
+  description: Do not delete the Deployment.
+  enforced_by: invariant
+  invariant: deployment_kept
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: hpa_configured
+  kind: goal
+  required: true
+  description: HPA {{app}} targets the Deployment with min {{min}}, max {{max}} and CPU target {{cpu}}%
+- id: target_eligible
+  kind: goal
+  required: true
+  description: The container has a CPU request
+- id: deployment_kept
+  kind: guard
+  required: true
+  description: Deployment UID unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - hpa_configured
+    - target_eligible
+    must_pass:
+    - deployment_kept
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-hpa-only.sh
+  - reference/wrong-wrong-bounds.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

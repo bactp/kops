@@ -1,0 +1,145 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-obs-probe-startup-001
+revision: 1
+title: Stop a liveness probe from killing a slow-starting application
+status: validated
+family_id: PF-OBS-001
+difficulty:
+  level: 2
+  rationale: The restart loop is caused by probe timing, not by the app; removing the probe is blocked and a small initialDelay bump is not enough.
+tags:
+- probes
+- liveness
+- startupprobe
+- crashloop
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-04
+    mapping_rationale: Probes are the primitive that makes deployments self-healing without killing healthy starts.
+  ckad:
+    enabled: true
+    domain: observability-maintenance
+    primary_competency: CKAD-AOM-02
+    mapping_rationale: Implement probes and health checks.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: probe-
+    app:
+      type: choice
+      choices:
+      - warehouse
+      - geocoder
+      - ranker
+      - importer
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    delay:
+      type: choice
+      choices:
+      - 20
+      - 25
+      - 30
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: 'Deployment {{app}} (2 replicas): the app listens only {{delay}} s after start. Liveness probe (initialDelay 2 s, period 3 s, failureThreshold 2) kills it before that, so pods restart forever.'
+  fixtures:
+  - fixtures/web.yaml
+  faults:
+  - id: probe_too_aggressive
+    category: misconfiguration
+    layer: object
+    description: liveness probe fires before the application is up
+constraints:
+- id: keep_liveness
+  description: The liveness probe must stay, on the same path.
+  enforced_by: invariant
+  invariant: liveness_kept
+- id: keep_replicas
+  description: Keep 2 replicas.
+  enforced_by: invariant
+  invariant: replicas_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: pods_stable
+  kind: goal
+  required: true
+  description: Both pods Ready with zero restarts, stable over time
+- id: liveness_kept
+  kind: guard
+  required: true
+  description: A liveness probe on /healthz still exists
+- id: replicas_unchanged
+  kind: guard
+  required: true
+  description: spec.replicas still 2
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - pods_stable
+    must_pass:
+    - liveness_kept
+    - replicas_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-remove-liveness.sh
+  - reference/wrong-small-initial-delay.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

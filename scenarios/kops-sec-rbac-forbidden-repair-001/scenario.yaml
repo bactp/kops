@@ -1,0 +1,134 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-sec-rbac-forbidden-repair-001
+revision: 1
+title: Repair a RoleBinding and Role that leave a deploy bot Forbidden
+status: validated
+family_id: PF-SEC-003
+difficulty:
+  level: 3
+  rationale: Two independent mistakes (wrong API group in the Role, wrong namespace in the binding subject) must be found with can-i; the cluster-admin shortcut is blocked.
+tags:
+- rbac
+- forbidden
+- troubleshooting
+- apigroup
+profiles:
+  cka:
+    enabled: true
+    domain: cluster-architecture
+    primary_competency: CKA-ARC-01
+    mapping_rationale: Diagnosing and fixing an RBAC grant (Role rules and RoleBinding subject).
+  ckad:
+    enabled: true
+    domain: environment-config-security
+    primary_competency: CKAD-AEC-02
+    mapping_rationale: Authorization troubleshooting for a workload identity.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: ci-
+    sa:
+      type: choice
+      choices:
+      - deploy-bot
+      - release-runner
+      - rollout-agent
+    app:
+      type: choice
+      choices:
+      - catalogue
+      - gateway
+      - orders
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: ServiceAccount {{sa}} exists in {{ns}}. Role {{app}}-deployer grants get/list/patch on `deployments` in apiGroup "" (wrong; deployments live in apps) and update on deployments/scale in "". RoleBinding {{app}}-deployer references the Role but its subject is ServiceAccount {{sa}} in namespace default (wrong).
+  fixtures: []
+  faults:
+  - id: wrong_api_group
+    category: misconfiguration
+    layer: object
+    description: Role rules use apiGroup "" instead of apps
+  - id: wrong_subject_namespace
+    category: wrong-reference
+    layer: object
+    description: RoleBinding subject namespace is default
+constraints:
+- id: least_privilege
+  description: Do not grant more than deployment read/patch/scale in this namespace.
+  enforced_by: invariant
+  invariant: no_excess_access
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: deploy_access_works
+  kind: goal
+  required: true
+  description: ServiceAccount can get/list/patch deployments and update deployments/scale in the namespace
+- id: no_excess_access
+  kind: guard
+  required: true
+  description: ServiceAccount cannot delete deployments, read secrets, or act on deployments elsewhere
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - deploy_access_works
+    must_pass:
+    - no_excess_access
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-cluster-admin.sh
+  - reference/wrong-subject-only.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

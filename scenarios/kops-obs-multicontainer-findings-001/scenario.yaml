@@ -1,0 +1,151 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-obs-multicontainer-findings-001
+revision: 1
+title: Identify which container of a multi-container pod is failing and record its exit code
+status: validated
+family_id: PF-OBS-004
+difficulty:
+  level: 2
+  rationale: 'Diagnosis-only task: the answer is an object created in the cluster, and ''fixing'' the pod is blocked.'
+tags:
+- diagnosis
+- multi-container
+- exit-code
+- logs
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-04
+    mapping_rationale: Evaluating container output and status to identify a failing container.
+  ckad:
+    enabled: true
+    domain: observability-maintenance
+    primary_competency: CKAD-AOM-05
+    mapping_rationale: 'Debugging in Kubernetes: finding which container fails and why.'
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: diag-
+    app:
+      type: choice
+      choices:
+      - pipeline
+      - reportgen
+      - ingestor
+      - mailroom
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    bad:
+      type: choice
+      choices:
+      - sync
+      - shipper
+      - indexer
+      - cleaner
+    code:
+      type: choice
+      choices:
+      - 17
+      - 23
+      - 42
+      - 64
+      - 99
+    reason:
+      type: choice
+      choices:
+      - license expired
+      - disk quota exceeded
+      - schema mismatch
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: 'Deployment {{app}} (1 replica) has three containers: web, {{bad}} and metrics. Container {{bad}} prints ''error: {{reason}}'' and exits {{code}} in a loop; the others run.'
+  fixtures:
+  - fixtures/app.yaml
+  faults:
+  - id: one_container_failing
+    category: misconfiguration
+    layer: object
+    description: container {{bad}} exits with code {{code}}
+constraints:
+- id: diagnose_only
+  description: Do not modify the Deployment.
+  enforced_by: invariant
+  invariant: workload_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: findings_recorded
+  kind: goal
+  required: true
+  description: ConfigMap {{app}}-findings records the failing container and its exit code
+- id: workload_unchanged
+  kind: guard
+  required: true
+  description: Deployment unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - findings_recorded
+    must_pass:
+    - workload_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-wrong-container.sh
+  - reference/wrong-fix-by-deleting.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

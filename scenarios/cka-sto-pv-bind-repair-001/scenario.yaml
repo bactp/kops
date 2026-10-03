@@ -1,0 +1,154 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-sto-pv-bind-repair-001
+revision: 1
+title: Make a Pending claim bind to its pre-provisioned PersistentVolume
+status: validated
+family_id: PF-STO-002
+difficulty:
+  level: 3
+  rationale: Three simultaneous mismatches (class, capacity, access mode) must be corrected on the volume because the claim must not change; deleting the claim is blocked.
+tags:
+- pv
+- pvc
+- binding
+- storageclass
+- accessmodes
+- capacity
+profiles:
+  cka:
+    enabled: true
+    domain: storage
+    primary_competency: CKA-STO-03
+    mapping_rationale: Managing PersistentVolumes and PersistentVolumeClaims, including binding.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: bind-
+    app:
+      type: choice
+      choices:
+      - warehouse
+      - vault
+      - mediahub
+      - datalake
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    sc:
+      type: choice
+      choices:
+      - fast-local
+      - tier1
+      - gold-disk
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: PVC {{app}}-claim wants 2Gi, ReadWriteOnce, storageClassName {{sc}}. PV {{app}}-vol was prepared for it but has 1Gi, ReadOnlyMany and class archive, so the claim is Pending and the Deployment pod cannot start.
+  fixtures:
+  - fixtures/storage.yaml
+  - fixtures/deployment.yaml
+  faults:
+  - id: class_mismatch
+    category: misconfiguration
+    layer: storage
+    description: PV class is archive
+  - id: capacity_too_small
+    category: misconfiguration
+    layer: storage
+    description: PV is 1Gi, claim wants 2Gi
+  - id: access_mode_mismatch
+    category: misconfiguration
+    layer: storage
+    description: PV is ReadOnlyMany, claim wants ReadWriteOnce
+constraints:
+- id: claim_untouched
+  description: Do not modify, delete or re-create the claim; fix the volume.
+  enforced_by: invariant
+  invariant: claim_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: claim_bound_to_prepared_volume
+  kind: goal
+  required: true
+  description: The claim is Bound to PV {{app}}-vol
+- id: app_running
+  kind: goal
+  required: true
+  description: Deployment rollout complete
+- id: claim_unchanged
+  kind: guard
+  required: true
+  description: Claim UID and spec unchanged
+- id: volume_retained
+  kind: guard
+  required: true
+  description: PV {{app}}-vol keeps UID and reclaim policy Retain
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - claim_bound_to_prepared_volume
+    - app_running
+    must_pass:
+    - claim_unchanged
+    - volume_retained
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 90
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-delete-claim.sh
+  - reference/wrong-class-only.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

@@ -1,0 +1,141 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-net-ingress-rules-001
+revision: 1
+title: Publish two Services behind one Ingress host with path rules
+status: validated
+family_id: PF-NET-007
+difficulty:
+  level: 2
+  rationale: 'Needs the Ingress rule syntax, pathType Prefix and the ingress class. Spec-only: no ingress controller runs, so traffic is not verified.'
+tags:
+- ingress
+- pathtype
+- ingressclass
+- spec-only
+profiles:
+  cka:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKA-NET-05
+    mapping_rationale: Ingress resources (controller behaviour is out of reach on this backend).
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-03
+    mapping_rationale: Use Ingress rules to expose applications.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: edge-
+    app:
+      type: choice
+      choices:
+      - shop
+      - forum
+      - blog
+    host:
+      type: choice
+      choices:
+      - shop.example.test
+      - app.corp.test
+      - portal.lab.test
+    class:
+      type: choice
+      choices:
+      - edge
+      - public-gw
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Services {{app}}-api and {{app}}-web exist in {{ns}} with ready endpoints. IngressClass {{class}} exists. No Ingress exists.
+  fixtures:
+  - fixtures/backends.yaml
+  - fixtures/ingressclass.yaml
+  faults:
+  - id: no_ingress
+    category: missing-resource
+    layer: object
+    description: services are not published through an Ingress
+constraints:
+- id: keep_backends
+  description: Do not modify the Services.
+  enforced_by: invariant
+  invariant: backends_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: ingress_rules_correct
+  kind: goal
+  required: true
+  description: Ingress {{app}}-edge routes {{host}}/api to {{app}}-api:80 and {{host}}/ to {{app}}-web:80, both Prefix, class {{class}}
+- id: backends_unchanged
+  kind: guard
+  required: true
+  description: Services unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - ingress_rules_correct
+    must_pass:
+    - backends_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-exact-paths.sh
+  - reference/wrong-swapped-backends.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

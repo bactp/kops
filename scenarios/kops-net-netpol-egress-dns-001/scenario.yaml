@@ -1,0 +1,142 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-net-netpol-egress-dns-001
+revision: 1
+title: Let a client resolve DNS under an egress NetworkPolicy without opening other egress
+status: validated
+family_id: PF-NET-005
+difficulty:
+  level: 2
+  rationale: Calls fail by name resolution, not by the app rule; the fix is a narrowly scoped DNS egress rule, while allow-all egress is blocked by a negative probe.
+tags:
+- networkpolicy
+- egress
+- dns
+profiles:
+  cka:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKA-NET-02
+    mapping_rationale: Egress NetworkPolicies, including the DNS allowance, are part of defining and enforcing Network Policies.
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-01
+    mapping_rationale: NetworkPolicy basics.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features:
+  - networkpolicy
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: egr-
+    app:
+      type: choice
+      choices:
+      - catalog
+      - recipes
+      - geodata
+    other:
+      type: choice
+      choices:
+      - admin
+      - metrics
+      - debugger
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Client pods (app=client) have an egress policy permitting only TCP {{port}} to {{app}} pods. DNS (UDP/TCP 53) is not permitted, so calls by Service name fail. A second Service {{other}} must stay unreachable from the client.
+  fixtures:
+  - fixtures/apps.yaml
+  - fixtures/client.yaml
+  - fixtures/policy.yaml
+  faults:
+  - id: dns_egress_missing
+    category: network-policy
+    layer: network
+    description: egress policy has no rule for port 53
+constraints:
+- id: egress_stays_narrow
+  description: Client must still be unable to reach the {{other}} service.
+  enforced_by: invariant
+  invariant: other_service_blocked
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: client_reaches_app_by_name
+  kind: goal
+  required: true
+  description: Client calls http://{{app}}/ by service name and gets HTTP 200
+- id: other_service_blocked
+  kind: guard
+  required: true
+  description: Client still cannot reach the {{other}} service
+- id: egress_policy_exists
+  kind: guard
+  required: true
+  description: The client-egress policy still exists
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - client_reaches_app_by_name
+    must_pass:
+    - other_service_blocked
+    - egress_policy_exists
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-allow-all-egress.sh
+  - reference/wrong-delete-policy.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

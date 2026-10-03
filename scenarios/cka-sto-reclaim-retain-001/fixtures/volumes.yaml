@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata: {name: "{{app}}-pv-{{d}}"}
+spec:
+  capacity: {storage: 1Gi}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: manual
+  hostPath: {path: "/tmp/kops/{{ns}}/d", type: DirectoryOrCreate}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata: {name: "{{app}}-pv-{{c}}"}
+spec:
+  capacity: {storage: 1Gi}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: manual
+  hostPath: {path: "/tmp/kops/{{ns}}/c", type: DirectoryOrCreate}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: "{{app}}-data", namespace: "{{ns}}"}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: manual
+  volumeName: "{{app}}-pv-{{d}}"
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: "{{app}}-cache", namespace: "{{ns}}"}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: manual
+  volumeName: "{{app}}-pv-{{c}}"
+  resources: {requests: {storage: 1Gi}}

@@ -1,0 +1,162 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-trb-startup-cascade-001
+revision: 1
+title: 'Work through a start-up cascade: missing ServiceAccount, wrong ConfigMap volume, wrong targetPort'
+status: validated
+family_id: PF-OBS-004
+difficulty:
+  level: 3
+  rationale: Each fault only becomes visible after the previous one is fixed and shows up in a different place (ReplicaSet events, pod events, Service endpoints).
+tags:
+- troubleshooting
+- serviceaccount
+- configmap
+- volume
+- service
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-05
+    mapping_rationale: The last fault is a Service routing defect; the whole chain is a networking/application troubleshooting exercise.
+  ckad:
+    enabled: true
+    domain: observability-maintenance
+    primary_competency: CKAD-AOM-05
+    mapping_rationale: 'Debugging in Kubernetes: following a failure chain from admission to routing.'
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: chain-
+    app:
+      type: choice
+      choices:
+      - bulletin
+      - greeter
+      - notices
+      - welcome
+    port:
+      type: port
+      min: 8000
+      max: 8499
+    port2:
+      type: port
+      min: 8500
+      max: 8999
+    sa:
+      type: choice
+      choices:
+      - web-runtime
+      - site-sa
+      - frontend-sa
+    greet:
+      type: choice
+      choices:
+      - hello from the east wing
+      - greetings, traveller
+      - welcome aboard
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (2 replicas) uses ServiceAccount {{sa}} (does not exist), mounts ConfigMap {{app}}-config (the real one is {{app}}-conf), and Service {{app}} targets port {{port2}} instead of {{port}}.
+  fixtures:
+  - fixtures/configmap.yaml
+  - fixtures/svc.yaml
+  - fixtures/web.yaml
+  faults:
+  - id: missing_serviceaccount
+    category: missing-resource
+    layer: object
+    description: ServiceAccount {{sa}} does not exist
+  - id: wrong_configmap_volume
+    category: wrong-reference
+    layer: object
+    description: volume references ConfigMap {{app}}-config
+  - id: wrong_target_port
+    category: misconfiguration
+    layer: network
+    description: Service targetPort is {{port2}}
+constraints:
+- id: keep_config
+  description: Keep the existing ConfigMap and its content.
+  enforced_by: invariant
+  invariant: configmap_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: app_serves_greeting
+  kind: goal
+  required: true
+  description: The Service returns the greeting stored in the ConfigMap
+- id: rollout_healthy
+  kind: goal
+  required: true
+  description: Both replicas ready
+- id: configmap_unchanged
+  kind: guard
+  required: true
+  description: ConfigMap {{app}}-conf unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - app_serves_greeting
+    - rollout_healthy
+    must_pass:
+    - configmap_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-serviceaccount-only.sh
+  - reference/wrong-no-service-fix.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

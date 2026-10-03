@@ -1,0 +1,39 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-arc-extension-interfaces-report-001
+criteria:
+  - id: runtime
+    invariant: interfaces_reported
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "cluster-interfaces", namespace: "{{ns}}"}, jsonpath: ".data.runtime", op: eq, value_from: {resource: {kind: Node, selector: "node-role.kubernetes.io/control-plane"}, jsonpath: ".status.nodeInfo.containerRuntimeVersion"}}
+
+  - id: cni
+    invariant: interfaces_reported
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "cluster-interfaces", namespace: "{{ns}}"}, jsonpath: ".data.cni", op: eq, value_from: {resource: {kind: DaemonSet, selector: "app=kindnet", namespace: "kube-system"}, jsonpath: ".metadata.name"}}
+
+  - id: provisioner
+    invariant: interfaces_reported
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "cluster-interfaces", namespace: "{{ns}}"}, jsonpath: ".data.provisioner", op: eq, value_from: {resource: {kind: StorageClass, name: standard}, jsonpath: ".provisioner"}}
+
+  - id: kubelet
+    invariant: interfaces_reported
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "cluster-interfaces", namespace: "{{ns}}"}, jsonpath: ".data.kubelet", op: eq, value_from: {resource: {kind: Node, selector: "node-role.kubernetes.io/control-plane"}, jsonpath: ".status.nodeInfo.kubeletVersion"}}
+
+  - id: cni_ds
+    invariant: kube_system_untouched
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: DaemonSet, name: kindnet, namespace: kube-system}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}
+
+  - id: sc
+    invariant: kube_system_untouched
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: StorageClass, name: standard}, scope: jsonpaths, jsonpaths: [.metadata.uid, .provisioner], baseline: post-setup}

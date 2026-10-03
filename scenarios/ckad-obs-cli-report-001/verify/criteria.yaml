@@ -1,0 +1,27 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: ckad-obs-cli-report-001
+criteria:
+  - id: oldest
+    invariant: answers_recorded
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "pod-report", namespace: "{{ns}}"}, jsonpath: '.data.oldest', op: eq, value: "{{pre}}-1"}
+
+  - id: largest
+    invariant: answers_recorded
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "pod-report", namespace: "{{ns}}"}, jsonpath: '.data.largestMemoryRequest', op: eq, value: "{{pre}}-{{bigidx}}"}
+
+  - id: not_running
+    invariant: answers_recorded
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: ConfigMap, name: "pod-report", namespace: "{{ns}}"}, jsonpath: '.data.notRunning', op: eq, value: "{{nfail}}"}
+
+  - id: five_pods
+    invariant: pods_untouched
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.count, resource: {kind: Pod, namespace: "{{ns}}"}, op: eq, value: 5}

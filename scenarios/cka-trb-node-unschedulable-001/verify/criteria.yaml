@@ -1,0 +1,43 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-trb-node-unschedulable-001
+criteria:
+  - id: none_unschedulable
+    invariant: workers_schedulable
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Node, selector: "hold"}, jsonpath: ".spec.unschedulable", op: absent}
+
+  - id: hold_taint_gone
+    invariant: workers_schedulable
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Node, selector: "hold=taint"}, jsonpath: '.spec.taints[?(@.key=="{{key}}")].key', op: absent}
+
+  - id: rollout_done
+    invariant: pods_running
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+
+  - id: four_running
+    invariant: pods_running
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.placement, namespace: "{{ns}}", selector: "app={{app}}", min_pods: 4, node_selector: "hold", mode: within}
+
+  - id: cp_taint
+    invariant: controlplane_taint_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Node, selector: "node-role.kubernetes.io/control-plane"}, jsonpath: '.spec.taints[?(@.key=="node-role.kubernetes.io/control-plane")].effect', op: eq, value: NoSchedule}
+
+  - id: dep_spec
+    invariant: deployment_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}

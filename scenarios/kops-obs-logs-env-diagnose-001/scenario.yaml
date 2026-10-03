@@ -1,0 +1,143 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-obs-logs-env-diagnose-001
+revision: 1
+title: Read the logs of a crash-looping app to find the setting it lacks
+status: validated
+family_id: PF-OBS-002
+difficulty:
+  level: 2
+  rationale: The failing setting and then its required value both come from logs and from discovering the right Service; wrong values produce a different log message.
+tags:
+- logs
+- crashloopbackoff
+- env
+- troubleshooting
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-04
+    mapping_rationale: Evaluating container output streams to diagnose a failing application.
+  ckad:
+    enabled: true
+    domain: observability-maintenance
+    primary_competency: CKAD-AOM-04
+    mapping_rationale: Utilize container logs.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: log-
+    app:
+      type: choice
+      choices:
+      - gateway-api
+      - session-svc
+      - cart
+      - profile-api
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    cache:
+      type: choice
+      choices:
+      - redis-cache
+      - session-store
+      - hot-cache
+      - kv-store
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: 'Deployment {{app}} exits with code 3 (''fatal: CACHE_HOST is not set''). A cache Service {{cache}} exists in the namespace. Setting CACHE_HOST to anything unreachable makes the app exit with code 4 instead.'
+  fixtures:
+  - fixtures/cache.yaml
+  - fixtures/app.yaml
+  faults:
+  - id: missing_env
+    category: misconfiguration
+    layer: object
+    description: required env var CACHE_HOST absent
+constraints:
+- id: keep_cache
+  description: Do not modify the cache Deployment or Service.
+  enforced_by: invariant
+  invariant: cache_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: app_serves_with_cache
+  kind: goal
+  required: true
+  description: App page reports cache-reachable
+- id: rollout_healthy
+  kind: goal
+  required: true
+  description: Rollout complete
+- id: cache_unchanged
+  kind: guard
+  required: true
+  description: Cache Deployment and Service unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - app_serves_with_cache
+    - rollout_healthy
+    must_pass:
+    - cache_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-unreachable-host.sh
+  - reference/wrong-wrong-service.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

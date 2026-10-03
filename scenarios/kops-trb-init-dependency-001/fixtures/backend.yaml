@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{dep}}-server
+  namespace: {{ns}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: {{dep}}-server}
+  template:
+    metadata:
+      labels: {app: {{dep}}-server}
+    spec:
+      containers:
+        - name: web
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "mkdir -p /tmp/w && echo backend-up > /tmp/w/index.html && exec httpd -f -p {{dport}} -h /tmp/w"]
+          readinessProbe:
+            tcpSocket: {port: {{dport}}}
+            periodSeconds: 2

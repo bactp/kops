@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app}}
+  namespace: {{ns}}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: {{app}}}
+  template:
+    metadata:
+      labels: {app: {{app}}}
+    spec:
+      containers:
+        - name: web
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /www; echo ok > /www/healthz
+              if [ "$DB_USERNAME" = "{{user}}" ] && [ "$DB_PASSWORD" = "{{pw}}" ]; then echo auth-ok > /www/index.html; else echo auth-denied > /www/index.html; fi
+              exec httpd -f -p {{port}} -h /www
+          readinessProbe:
+            httpGet: {path: /healthz, port: {{port}}}
+            periodSeconds: 2

@@ -1,0 +1,156 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-net-netpol-ingress-repair-001
+revision: 1
+title: Restore client access blocked by a NetworkPolicy that matches the wrong label and port
+status: validated
+family_id: PF-NET-006
+difficulty:
+  level: 2
+  rationale: Two defects in one allow rule; deleting the policy would restore access but is blocked by a negative probe from an unauthorised pod.
+tags:
+- networkpolicy
+- ingress
+- labels
+- ports
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-05
+    mapping_rationale: Diagnosing why traffic is blocked and repairing the policy is the networking troubleshooting skill.
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-01
+    mapping_rationale: 'Basic understanding of NetworkPolicies: selectors and ports in an ingress rule.'
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features:
+  - networkpolicy
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: pol-
+    app:
+      type: choice
+      choices:
+      - vault
+      - ledger
+      - inventory
+      - pricing
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    cl:
+      type: choice
+      choices:
+      - checkout
+      - portal
+      - mobile-bff
+    wrong:
+      type: choice
+      choices:
+      - web
+      - ui
+      - public
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Namespace {{ns}} has default-deny-ingress (all pods) and allow-clients, which admits pods labelled role={{wrong}} on TCP 80 to {{app}} pods. The real client pods are labelled role={{cl}} and {{app}} listens on {{port}}. An unrelated pod labelled role=scanner must stay blocked.
+  fixtures:
+  - fixtures/web.yaml
+  - fixtures/service.yaml
+  - fixtures/clients.yaml
+  - fixtures/policies.yaml
+  faults:
+  - id: allow_wrong_label
+    category: network-policy
+    layer: network
+    description: ingress rule selects role={{wrong}}
+  - id: allow_wrong_port
+    category: network-policy
+    layer: network
+    description: ingress rule opens port 80 but pods listen on {{port}}
+constraints:
+- id: keep_isolation
+  description: Other pods in the namespace must stay blocked and the default-deny policy must remain.
+  enforced_by: invariant
+  invariant: isolation_kept
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: clients_can_reach_app
+  kind: goal
+  required: true
+  description: Pods labelled role={{cl}} get HTTP 200 from the Service
+- id: isolation_kept
+  kind: guard
+  required: true
+  description: Pod labelled role=scanner is still blocked
+- id: default_deny_kept
+  kind: guard
+  required: true
+  description: default-deny-ingress policy exists and is unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - clients_can_reach_app
+    must_pass:
+    - isolation_kept
+    - default_deny_kept
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-delete-policies.sh
+  - reference/wrong-allow-all-sources.sh
+  - reference/wrong-label-only.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

@@ -1,0 +1,138 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-net-nodeport-expose-001
+revision: 1
+title: Expose a Deployment through a NodePort Service on a requested port
+status: validated
+family_id: PF-NET-001
+difficulty:
+  level: 2
+  rationale: Creation task with exact service type, port mapping and nodePort; the default expose leaves a random node port.
+tags:
+- service
+- nodeport
+- expose
+profiles:
+  cka:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKA-NET-03
+    mapping_rationale: ClusterIP/NodePort Services and endpoints.
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-02
+    mapping_rationale: Providing access to applications via Services.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: pub-
+    app:
+      type: choice
+      choices:
+      - gallery
+      - tracker
+      - wiki
+      - pastebin
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    np:
+      type: port
+      min: 30100
+      max: 30999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (2 replicas, label app={{app}}, containerPort {{port}}) runs but has no Service.
+  fixtures:
+  - fixtures/web.yaml
+  faults:
+  - id: no_service
+    category: missing-resource
+    layer: object
+    description: workload is not exposed
+constraints:
+- id: keep_workload
+  description: Do not modify the Deployment.
+  enforced_by: invariant
+  invariant: deployment_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: nodeport_service_ok
+  kind: goal
+  required: true
+  description: Service {{app}}-public is a NodePort on port 80 -> {{port}} with nodePort {{np}}
+- id: service_serves
+  kind: goal
+  required: true
+  description: Endpoints are ready and the Service answers HTTP 200
+- id: deployment_unchanged
+  kind: guard
+  required: true
+  description: Deployment pod template unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - nodeport_service_ok
+    - service_serves
+    must_pass:
+    - deployment_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-clusterip-only.sh
+  - reference/wrong-random-nodeport.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

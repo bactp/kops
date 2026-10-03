@@ -1,0 +1,143 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-net-externalname-alias-001
+revision: 1
+title: Create an ExternalName alias for a Service in another namespace
+status: validated
+family_id: PF-NET-002
+difficulty:
+  level: 1
+  rationale: Single creation task with a precise object type; a ClusterIP lookalike resolves but has no endpoints.
+tags:
+- service
+- externalname
+- dns
+- cross-namespace
+profiles:
+  cka:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKA-NET-03
+    mapping_rationale: Service types, including ExternalName.
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-02
+    mapping_rationale: Providing access to applications via Services.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: alias-
+    svc:
+      type: choice
+      choices:
+      - pricing
+      - ledger-api
+      - geo
+      - catalog-api
+    alias:
+      type: choice
+      choices:
+      - pricing-local
+      - backend
+      - upstream
+      - data-api
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Backend Service {{svc}} runs in {{ns}}-data. A client Deployment (label app=client) in {{ns}} has no way to reach it by a local name.
+  fixtures:
+  - fixtures/backend.yaml
+  - fixtures/client.yaml
+  faults:
+  - id: no_alias
+    category: missing-resource
+    layer: network
+    description: no local name for the backend
+constraints:
+- id: backend_untouched
+  description: Do not modify anything in {{ns}}-data.
+  enforced_by: invariant
+  invariant: backend_unchanged
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: alias_works
+  kind: goal
+  required: true
+  description: A client in {{ns}} gets the backend's page from http://{{alias}}/
+- id: alias_is_externalname
+  kind: goal
+  required: true
+  description: Service {{alias}} in {{ns}} is of type ExternalName pointing at the backend's DNS name
+- id: backend_unchanged
+  kind: guard
+  required: true
+  description: Backend Deployment and Service unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - alias_works
+    - alias_is_externalname
+    must_pass:
+    - backend_unchanged
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-clusterip-lookalike.sh
+  - reference/wrong-wrong-target.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

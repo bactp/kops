@@ -1,0 +1,35 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-res-oomkilled-limit-001
+criteria:
+  - id: ready_and_steady
+    invariant: pods_stable
+    required: true
+    settle: true
+    failure_class: unstable
+    check:
+      type: stability
+      window_seconds: 20
+      samples: 5
+      check: {type: k8s.count, resource: {kind: Pod, selector: "app={{app}}", namespace: "{{ns}}"}, field_filter: ".status.containerStatuses[0].ready==true", op: eq, value: 2}
+  - id: no_restarts_on_current_pods
+    invariant: pods_stable
+    required: true
+    settle: true
+    failure_class: unstable
+    check: {type: k8s.field, resource: {kind: Pod, selector: "app={{app}}", namespace: "{{ns}}"}, jsonpath: ".status.containerStatuses[0].restartCount", op: lte, value: 0}
+  - id: limit_present_and_capped
+    invariant: limit_within_policy
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: ".spec.template.spec.containers[0].resources.limits.memory", op: qty_lte, value: "{{cap}}"}
+  - id: limit_not_zero
+    invariant: limit_within_policy
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: ".spec.template.spec.containers[0].resources.limits.memory", op: qty_gte, value: "16Mi"}
+  - id: replicas_two
+    invariant: replicas_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: ".spec.replicas", op: eq, value: 2}

@@ -1,0 +1,126 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-trb-node-capacity-diagnose-001
+revision: 1
+title: Find the worker with the most CPU requested and mark it
+status: validated
+family_id: PF-OBS-006
+difficulty:
+  level: 3
+  rationale: Needs summing allocated requests per node, not counting pods; the node with the most pods is a deliberate distractor. Result is recorded as a label.
+tags:
+- diagnosis
+- resource-usage
+- describe-node
+- requests
+profiles:
+  cka:
+    enabled: true
+    domain: troubleshooting
+    primary_competency: CKA-TRB-03
+    mapping_rationale: Evaluating resource usage per node (allocated requests) from kubectl output.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 3
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: cap-
+    heavy:
+      type: choice
+      choices:
+      - a
+      - b
+      - c
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: 'Three workers labelled pool=a, pool=b, pool=c. Filler workloads in {{ns}} are pinned by nodeSelector: the pool={{heavy}} worker gets one pod requesting 700m CPU; the others get three pods of 200m and two pods of 250m. The worker with the highest total CPU requests is pool={{heavy}}; the node with the most pods is a different one.'
+  fixtures: []
+  faults:
+  - id: none
+    category: none
+    layer: node
+    description: diagnosis task; no fault to repair
+constraints:
+- id: read_only
+  description: Do not move, delete or modify the filler workloads.
+  enforced_by: invariant
+  invariant: workloads_untouched
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: heaviest_node_marked
+  kind: goal
+  required: true
+  description: The node with the highest CPU requests carries capacity=tight
+- id: only_one_marked
+  kind: goal
+  required: true
+  description: No other node carries capacity=tight
+- id: workloads_untouched
+  kind: guard
+  required: true
+  description: All 6 filler pods still run unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - heaviest_node_marked
+    - only_one_marked
+    must_pass:
+    - workloads_untouched
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-other-nodes.sh
+  - reference/wrong-label-all.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

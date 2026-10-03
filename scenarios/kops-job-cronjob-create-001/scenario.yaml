@@ -1,0 +1,135 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-job-cronjob-create-001
+revision: 1
+title: Create a CronJob with a schedule, concurrency and history policy, and run it once
+status: validated
+family_id: PF-WKL-006
+difficulty:
+  level: 2
+  rationale: Creation task combining the imperative create with a patch for policy fields and an on-demand run.
+tags:
+- cronjob
+- job
+- schedule
+- concurrencypolicy
+- create
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-04
+    mapping_rationale: CronJobs/Jobs as workload primitives.
+  ckad:
+    enabled: true
+    domain: design-build
+    primary_competency: CKAD-ADB-02
+    mapping_rationale: Choosing and configuring the right workload resource (CronJob).
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: cron-
+    app:
+      type: choice
+      choices:
+      - sweep
+      - prune
+      - rotate
+      - snapshot
+    sched:
+      type: choice
+      choices:
+      - '*/10 * * * *'
+      - 15 3 * * *
+      - 0 */6 * * *
+      - 30 2 * * 1
+    marker:
+      type: choice
+      choices:
+      - done-4412
+      - done-90ab
+      - done-c7e1
+      - done-2f08
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Namespace {{ns}} exists and is empty.
+  fixtures: []
+  faults:
+  - id: none
+    category: missing-resource
+    layer: object
+    description: the CronJob has to be created
+constraints: []
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: cronjob_configured
+  kind: goal
+  required: true
+  description: CronJob {{app}} has the requested schedule, image, concurrency and history limits
+- id: manual_run_completed
+  kind: goal
+  required: true
+  description: Job {{app}}-now created from the CronJob completed with the marker in its log
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - cronjob_configured
+    - manual_run_completed
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-no-policy.sh
+  - reference/wrong-no-run.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

@@ -1,0 +1,2 @@
+# Must FAIL: only the HPA is migrated; the other three manifests still use removed versions.
+kubectl -n {{ns}} patch configmap release-manifests --type merge -p '{"data":{"hpa.yaml":"apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata: {name: web, namespace: {{ns}}}\nspec:\n  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: web}\n  minReplicas: 2\n  maxReplicas: 5\n"}}'

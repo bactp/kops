@@ -1,0 +1,41 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-wl-rollout-pause-batch-001
+criteria:
+  - id: env_msg
+    invariant: changes_applied
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].env[?(@.name=="MSG")].value', op: eq, value: "{{msg}}"}
+
+  - id: cpu_limit
+    invariant: changes_applied
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.containers[0].resources.limits.cpu', op: qty_eq, value: "{{cpu}}"}
+
+  - id: sa_name
+    invariant: changes_applied
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.serviceAccountName', op: eq, value: "{{sa}}"}
+
+  - id: revision
+    invariant: single_revision
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.metadata.annotations["deployment.kubernetes.io/revision"]', op: eq, value: "2"}
+
+  - id: not_paused
+    invariant: rollout_not_paused
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.paused', op: ne, value: true}
+
+  - id: rollout_done
+    invariant: rollout_not_paused
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}

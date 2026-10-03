@@ -1,0 +1,138 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-net-netpol-cross-namespace-001
+revision: 1
+title: Admit one partner namespace through an ingress NetworkPolicy and nobody else
+status: validated
+family_id: PF-NET-004
+difficulty:
+  level: 3
+  rationale: Needs a namespaceSelector peer added to an existing rule; allow-all and deletion are blocked by negative probes from a third namespace.
+tags:
+- networkpolicy
+- namespaceselector
+- cross-namespace
+profiles:
+  cka:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKA-NET-02
+    mapping_rationale: Defining and enforcing Network Policies, including namespace-scoped peers.
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-01
+    mapping_rationale: 'NetworkPolicy basics: selecting peers by namespace.'
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features:
+  - networkpolicy
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: core-
+    app:
+      type: choice
+      choices:
+      - records
+      - orders
+      - billing-core
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Namespace {{ns}} runs {{app}} with default-deny-ingress and allow-same-namespace (admits pods of its own namespace on {{port}}). Namespaces {{ns}}-partner and {{ns}}-other each have a client pod (app=client). Partner traffic is currently dropped.
+  fixtures:
+  - fixtures/web.yaml
+  - fixtures/service.yaml
+  - fixtures/clients.yaml
+  - fixtures/policies.yaml
+  faults:
+  - id: partner_not_allowed
+    category: network-policy
+    layer: network
+    description: no ingress peer selects the partner namespace
+constraints:
+- id: only_partner
+  description: Only the partner namespace may be added; the other namespace and default-deny stay.
+  enforced_by: invariant
+  invariant: other_namespace_blocked
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: partner_can_reach
+  kind: goal
+  required: true
+  description: Client in {{ns}}-partner gets HTTP 200
+- id: other_namespace_blocked
+  kind: guard
+  required: true
+  description: Client in {{ns}}-other is still blocked
+- id: same_namespace_allowed
+  kind: guard
+  required: true
+  description: Client in the app's own namespace still gets HTTP 200
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - partner_can_reach
+    must_pass:
+    - other_namespace_blocked
+    - same_namespace_allowed
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-all-namespaces.sh
+  - reference/wrong-delete-policies.sh
+  - reference/wrong-replace-peer.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

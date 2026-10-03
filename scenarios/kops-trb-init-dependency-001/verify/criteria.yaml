@@ -1,0 +1,36 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-trb-init-dependency-001
+criteria:
+  - id: rollout_done
+    invariant: app_running
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+
+  - id: two_running
+    invariant: app_running
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.count, resource: {kind: Pod, selector: "app={{app}}", namespace: "{{ns}}"}, field_filter: ".status.phase==Running", op: eq, value: 2}
+
+  - id: dep_endpoints
+    invariant: dependency_routable
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.endpoints, service: "{{dep}}", namespace: "{{ns}}", min_ready: 1, port: {{dport}}}
+
+  - id: init_unchanged
+    invariant: gate_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.spec.template.spec.initContainers], baseline: post-setup}
+
+  - id: backend_unchanged
+    invariant: gate_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{dep}}-server", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}

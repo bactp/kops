@@ -1,0 +1,144 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: kops-ext-crd-discover-001
+revision: 1
+title: Discover an installed custom resource type and record its facts
+status: validated
+family_id: PF-EXT-001
+difficulty:
+  level: 2
+  rationale: Finding the group, kind, short name and readiness of objects of an unfamiliar API type through kubectl discovery; objects must not be 'cleaned up'.
+tags:
+- crd
+- custom-resources
+- discovery
+- api-resources
+profiles:
+  cka:
+    enabled: true
+    domain: cluster-architecture
+    primary_competency: CKA-ARC-08
+    mapping_rationale: Understanding CRDs and the custom resources of installed extensions.
+  ckad:
+    enabled: true
+    domain: environment-config-security
+    primary_competency: CKAD-AEC-01
+    mapping_rationale: Discover and use resources that extend Kubernetes.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: ext-
+    kind:
+      type: choice
+      choices:
+      - Gadget
+      - Sprocket
+      - Flange
+      - Bracket
+    grp:
+      type: choice
+      choices:
+      - fleet
+      - depot
+      - forge
+    short:
+      type: choice
+      choices:
+      - gdg
+      - spk
+      - flg
+      - brk
+    nready:
+      type: choice
+      choices:
+      - 1
+      - 2
+      - 3
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: A CRD {{kind}} (group {{grp}}.kops.example, shortName {{short}}, namespaced) is installed. Namespace {{ns}} holds 4 objects; {{nready}} of them have spec.phase=Ready.
+  fixtures: []
+  faults:
+  - id: none
+    category: none
+    layer: object
+    description: discovery task; no fault to repair
+constraints:
+- id: read_only
+  description: Do not modify or delete the custom resources.
+  enforced_by: invariant
+  invariant: objects_untouched
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: inventory_recorded
+  kind: goal
+  required: true
+  description: ConfigMap ext-inventory records kind, apiGroup, shortName and the number of Ready objects
+- id: objects_untouched
+  kind: guard
+  required: true
+  description: All 4 custom resources still exist
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - inventory_recorded
+    must_pass:
+    - objects_untouched
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-wrong-count.sh
+  - reference/wrong-clean-up-pending.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

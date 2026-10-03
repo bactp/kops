@@ -1,0 +1,123 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: ckad-obs-api-deprecation-001
+revision: 1
+title: Update stored manifests to API versions that this cluster still serves
+status: validated
+family_id: PF-OBS-005
+difficulty:
+  level: 2
+  rationale: Requires discovering which versions are served (api-resources/api-versions) for four kinds; artifact-style check on ConfigMap data (not applied to the cluster).
+tags:
+- api-deprecation
+- api-versions
+- configmap
+- spec-only
+profiles:
+  cka:
+    enabled: false
+  ckad:
+    enabled: true
+    domain: observability-maintenance
+    primary_competency: CKAD-AOM-01
+    mapping_rationale: 'Understand API deprecations: migrating manifests to served API versions.'
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: migr-
+    team:
+      type: choice
+      choices:
+      - payments
+      - growth
+      - platform
+      - search
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: ConfigMap release-manifests in {{ns}} holds four manifests (hpa.yaml, pdb.yaml, cronjob.yaml, flowschema.yaml) that use API versions removed from Kubernetes 1.35.
+  fixtures:
+  - fixtures/manifests.yaml
+  faults:
+  - id: removed_api_versions
+    category: misconfiguration
+    layer: object
+    description: manifests use autoscaling/v2beta2, policy/v1beta1, batch/v1beta1, flowcontrol v1beta3
+constraints:
+- id: keep_kinds
+  description: Keep each manifest's kind and name; only migrate the apiVersion.
+  enforced_by: invariant
+  invariant: kinds_preserved
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: api_versions_migrated
+  kind: goal
+  required: true
+  description: Each stored manifest uses an apiVersion served by the cluster
+- id: kinds_preserved
+  kind: guard
+  required: true
+  description: Each manifest still declares its original kind
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - api_versions_migrated
+    must_pass:
+    - kinds_preserved
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-partial-migration.sh
+  - reference/wrong-wrong-version.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

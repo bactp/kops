@@ -1,0 +1,52 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-net-multiport-service-repair-001
+criteria:
+  - id: main_page
+    invariant: both_ports_serve
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local:80/"
+      expect: reachable
+      status: 200
+      body_regex: '^main-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: admin_page
+    invariant: both_ports_serve
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local:9090/"
+      expect: reachable
+      status: 200
+      body_regex: '^admin-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: endpoints_admin
+    invariant: both_ports_have_endpoints
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.endpoints, service: "{{app}}", namespace: "{{ns}}", min_ready: 2, port: {{port2}}}
+
+  - id: svc_identity
+    invariant: objects_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Service, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec.clusterIP], baseline: post-setup}
+
+  - id: dep_template
+    invariant: objects_preserved
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.spec.template], baseline: post-setup}

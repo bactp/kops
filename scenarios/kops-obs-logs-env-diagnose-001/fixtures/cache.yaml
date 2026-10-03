@@ -1,0 +1,31 @@
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: {{cache}}
+   namespace: {{ns}}
+ spec:
+   replicas: 1
+   selector:
+     matchLabels: {app: {{cache}}}
+   template:
+     metadata:
+       labels: {app: {{cache}}}
+     spec:
+       containers:
+         - name: web
+           image: busybox:1.36.1
+           imagePullPolicy: IfNotPresent
+           command: ["sh", "-c", "mkdir -p /tmp/w && echo cache-up > /tmp/w/index.html && exec httpd -f -p 80 -h /tmp/w"]
+           readinessProbe:
+             tcpSocket: {port: 80}
+             periodSeconds: 2
+---
+ apiVersion: v1
+ kind: Service
+ metadata:
+   name: {{cache}}
+   namespace: {{ns}}
+ spec:
+   selector: {app: {{cache}}}
+   ports:
+     - {port: 80, targetPort: 80}

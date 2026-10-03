@@ -1,0 +1,41 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-job-native-sidecar-001
+criteria:
+  - id: shipper_init
+    invariant: sidecar_is_native
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: CronJob, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.jobTemplate.spec.template.spec.initContainers[?(@.name=="shipper")].restartPolicy', op: eq, value: Always}
+
+  - id: shipper_not_regular
+    invariant: sidecar_is_native
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: CronJob, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.jobTemplate.spec.template.spec.containers[?(@.name=="shipper")].name', op: absent}
+
+  - id: main_regular
+    invariant: main_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: CronJob, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.jobTemplate.spec.template.spec.containers[?(@.name=="main")].name', op: eq, value: main}
+
+  - id: job_complete
+    invariant: run_completed
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.condition, resource: {kind: Job, name: "{{job}}", namespace: "{{ns}}"}, condition: Complete, status: "True"}
+
+  - id: job_logs
+    invariant: run_completed
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.logs, resource: {kind: Job, name: "{{job}}", namespace: "{{ns}}"}, container: main, regex: "^{{marker}}$"}
+
+  - id: cron_settings
+    invariant: cron_settings_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: CronJob, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec.schedule], baseline: post-setup}

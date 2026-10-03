@@ -1,0 +1,148 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-sch-priorityclass-001
+revision: 1
+title: Create a PriorityClass and give a Deployment's pods that priority
+status: validated
+family_id: PF-SCH-004
+difficulty:
+  level: 1
+  rationale: Creation plus wiring; the numeric priority that admission writes on the pods proves the wiring.
+tags:
+- priorityclass
+- scheduling
+- create
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-05
+    mapping_rationale: Pod priority is part of configuring Pod admission and scheduling.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: prio-
+    app:
+      type: choice
+      choices:
+      - ingest
+      - billing-job
+      - alerts
+      - reconciler
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    pc:
+      type: choice
+      choices:
+      - business-critical
+      - tier-one
+      - revenue-path
+    val:
+      type: choice
+      choices:
+      - 100000
+      - 250000
+      - 500000
+      - 750000
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: Deployment {{app}} (2 replicas) runs with the default priority (0). No custom PriorityClass exists.
+  fixtures:
+  - fixtures/web.yaml
+  faults:
+  - id: default_priority
+    category: missing-resource
+    layer: object
+    description: no PriorityClass is assigned
+constraints:
+- id: not_global
+  description: The new class must not become the cluster-wide default.
+  enforced_by: invariant
+  invariant: not_global_default
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: priorityclass_correct
+  kind: goal
+  required: true
+  description: PriorityClass {{pc}} exists with value {{val}}
+- id: pods_use_priority
+  kind: goal
+  required: true
+  description: Running pods of {{app}} carry priority {{val}}
+- id: rollout_complete
+  kind: guard
+  required: true
+  description: Deployment rollout complete
+- id: not_global_default
+  kind: guard
+  required: true
+  description: '{{pc}} is not globalDefault'
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - priorityclass_correct
+    - pods_use_priority
+    must_pass:
+    - rollout_complete
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-class-only.sh
+  - reference/wrong-system-class.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

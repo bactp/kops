@@ -3,7 +3,7 @@ kind: Scenario
 id: kops-net-service-endpoint-repair-001
 revision: 1
 title: Restore traffic to a web Service that has no endpoints
-status: draft
+status: validated
 family_id: PF-NET-003
 difficulty:
   level: 2
@@ -25,7 +25,7 @@ profiles:
 backend:
   class: kind
   kubernetes_version: "1.35"
-  topology: {control_planes: 1, workers: 2}
+  topology: {control_planes: 1, workers: 0}
   features: []
   isolation: cluster
 

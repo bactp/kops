@@ -1,0 +1,63 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-sec-clusterrole-nodes-001
+criteria:
+  - id: can_get_nodes
+    invariant: cluster_read_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: get, resource: nodes, expect: allow}
+
+  - id: can_list_nodes
+    invariant: cluster_read_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: list, resource: nodes, expect: allow}
+
+  - id: can_watch_nodes
+    invariant: cluster_read_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: watch, resource: nodes, expect: allow}
+
+  - id: can_get_pv
+    invariant: cluster_read_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: get, resource: persistentvolumes, expect: allow}
+
+  - id: can_list_pv
+    invariant: cluster_read_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: list, resource: persistentvolumes, expect: allow}
+
+  - id: clusterrole_named
+    invariant: cluster_read_granted
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.exists, resource: {kind: ClusterRole, name: "{{cr}}"}, expect: present}
+
+  - id: cannot_patch_nodes
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: patch, resource: nodes, expect: deny}
+
+  - id: cannot_delete_nodes
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: delete, resource: nodes, expect: deny}
+
+  - id: cannot_read_secrets
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: get, resource: secrets, expect: deny, namespace: "kube-system"}
+
+  - id: cannot_create_pods
+    invariant: no_excess_access
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.can_i, as: "system:serviceaccount:{{ns}}:{{sa}}", verb: create, resource: pods, expect: deny, namespace: "{{ns}}"}

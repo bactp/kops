@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client
+  namespace: {{ns}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: client}
+  template:
+    metadata:
+      labels: {app: client}
+    spec:
+      hostNetwork: true
+      containers:
+        - name: web
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                if wget -q -T 2 -O /dev/null "http://{{svc}}/"; then echo "OK $(date +%T)"; else echo "FAIL $(date +%T)"; fi
+                sleep 2
+              done

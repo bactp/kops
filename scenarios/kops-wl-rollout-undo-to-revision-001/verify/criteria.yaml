@@ -1,0 +1,39 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-wl-rollout-undo-to-revision-001
+criteria:
+  - id: banner_is_revision_one
+    invariant: original_release_served
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^{{color}}-1\s*$'
+      attempts: 5
+      timeout_seconds: 3
+  - id: rollout_done
+    invariant: rollout_healthy
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+  - id: deployment_uid
+    invariant: deployment_not_recreated
+    required: true
+    failure_class: constraint-violation
+    check:
+      type: k8s.unchanged
+      resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}
+      scope: jsonpaths
+      jsonpaths: [".metadata.uid"]
+      baseline: post-setup
+  - id: replicas_three
+    invariant: replicas_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: ".spec.replicas", op: eq, value: 3}

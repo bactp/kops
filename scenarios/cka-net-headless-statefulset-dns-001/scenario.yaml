@@ -1,0 +1,136 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-net-headless-statefulset-dns-001
+revision: 1
+title: Replace a StatefulSet's ClusterIP Service by a headless one so DNS returns the pod addresses
+status: validated
+family_id: PF-NET-002
+difficulty:
+  level: 2
+  rationale: spec.clusterIP is immutable, so the Service must be deleted and re-created headless; the StatefulSet and the per-pod names must keep working.
+tags:
+- statefulset
+- headless-service
+- dns
+- service
+profiles:
+  cka:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKA-NET-03
+    mapping_rationale: ClusterIP vs headless Services and their endpoints.
+  ckad:
+    enabled: true
+    domain: services-networking
+    primary_competency: CKAD-SNW-02
+    mapping_rationale: Providing access to applications via Services.
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 0
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    ns:
+      type: dns-label
+      prefix: sts-
+    svc:
+      type: choice
+      choices:
+      - ring
+      - quorum
+      - shards
+      - replicaset
+    port:
+      type: port
+      min: 8000
+      max: 8999
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: StatefulSet {{svc}} (2 replicas, serviceName {{svc}}) exists. Service {{svc}} is a normal ClusterIP Service, so resolving {{svc}} returns one virtual IP, not the pod addresses.
+  fixtures:
+  - fixtures/sts.yaml
+  - fixtures/service.yaml
+  faults:
+  - id: governing_service_not_headless
+    category: misconfiguration
+    layer: network
+    description: Service {{svc}} has a ClusterIP
+constraints:
+- id: keep_statefulset
+  description: Do not modify or re-create the StatefulSet.
+  enforced_by: invariant
+  invariant: statefulset_untouched
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: headless_dns
+  kind: goal
+  required: true
+  description: Service {{svc}} is headless and its DNS name returns both pod addresses
+- id: pod_names_resolve
+  kind: guard
+  required: true
+  description: '{{svc}}-0 and {{svc}}-1 still resolve through the governing Service'
+- id: statefulset_untouched
+  kind: guard
+  required: true
+  description: StatefulSet UID and spec unchanged
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - headless_dns
+    must_pass:
+    - pod_names_resolve
+    - statefulset_untouched
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-extra-headless-service.sh
+  - reference/wrong-recreate-sts.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

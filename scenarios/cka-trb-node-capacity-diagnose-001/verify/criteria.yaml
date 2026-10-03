@@ -1,0 +1,27 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-trb-node-capacity-diagnose-001
+criteria:
+  - id: heaviest_labelled
+    invariant: heaviest_node_marked
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.count, resource: {kind: Node, selector: "capacity=tight,pool={{heavy}}"}, op: eq, value: 1}
+
+  - id: exactly_one_labelled
+    invariant: only_one_marked
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.count, resource: {kind: Node, selector: "capacity=tight"}, op: eq, value: 1}
+
+  - id: six_pods_running
+    invariant: workloads_untouched
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.count, resource: {kind: Pod, namespace: "{{ns}}"}, field_filter: ".status.phase==Running", op: eq, value: 6}
+
+  - id: big_unchanged
+    invariant: workloads_untouched
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "big", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}

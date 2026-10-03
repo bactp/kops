@@ -1,0 +1,36 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-net-netpol-egress-dns-001
+criteria:
+  - id: reaches_by_name
+    invariant: client_reaches_app_by_name
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: "{{ns}}", labels: {app: client}}
+      url: "http://{{app}}/"
+      expect: reachable
+      status: 200
+      body_regex: '^egress-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: other_blocked
+    invariant: other_service_blocked
+    required: true
+    failure_class: collateral-damage
+    check:
+      type: net.http
+      from: {namespace: "{{ns}}", labels: {app: client}}
+      url: "http://{{other}}/"
+      expect: blocked
+      attempts: 2
+      timeout_seconds: 3
+
+  - id: policy_exists
+    invariant: egress_policy_exists
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.exists, resource: {kind: NetworkPolicy, name: client-egress, namespace: "{{ns}}"}, expect: present}

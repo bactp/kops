@@ -1,0 +1,134 @@
+apiVersion: kops/v1alpha1
+kind: Scenario
+id: cka-sch-taint-toleration-001
+revision: 1
+title: Let a team's Deployment run on its tainted dedicated node without removing the taint
+status: validated
+family_id: PF-SCH-002
+difficulty:
+  level: 2
+  rationale: Pods are Pending on a taint; the fix is a toleration plus keeping the pods on the dedicated node, while removing the taint is blocked.
+tags:
+- scheduling
+- taints
+- tolerations
+- nodeselector
+profiles:
+  cka:
+    enabled: true
+    domain: workloads-scheduling
+    primary_competency: CKA-WLS-05
+    mapping_rationale: Taints and tolerations control Pod scheduling.
+  ckad:
+    enabled: false
+backend:
+  class: kind
+  kubernetes_version: '1.35'
+  topology:
+    control_planes: 1
+    workers: 2
+  features: []
+  isolation: cluster
+task:
+  statement_file: task.md
+  parameters:
+    port:
+      type: port
+      min: 8000
+      max: 8999
+    ns:
+      type: dns-label
+      prefix: ded-
+    app:
+      type: choice
+      choices:
+      - pipeline
+      - scorer
+      - etl
+      - forecast
+    team:
+      type: choice
+      choices:
+      - data
+      - ml
+      - research
+      - payments
+  agent_context:
+    default_namespace: '{{ns}}'
+interfaces:
+  allowed:
+  - kubectl
+  forbidden:
+  - shell
+  - file-write
+  - internet
+  - ssh
+  agent_identity:
+    kind: cluster-admin
+  node_access: none
+initial_state:
+  description: One worker is labelled and tainted dedicated={{team}}:NoSchedule. Deployment {{app}} (2 replicas) selects dedicated={{team}} but has no toleration, so pods are Pending.
+  fixtures:
+  - fixtures/web.yaml
+  faults:
+  - id: missing_toleration
+    category: scheduling-constraint
+    layer: object
+    description: taint on the dedicated node is not tolerated
+constraints:
+- id: keep_taint
+  description: The dedicated node must keep its taint.
+  enforced_by: invariant
+  invariant: taint_intact
+budgets:
+  max_steps: 40
+  max_wall_seconds: 900
+  per_action_timeout_seconds: 60
+  max_output_bytes_per_action: 8192
+expected_invariants:
+- id: running_on_dedicated
+  kind: goal
+  required: true
+  description: Both pods run only on the dedicated node
+- id: taint_intact
+  kind: guard
+  required: true
+  description: The dedicated node still has taint dedicated={{team}}:NoSchedule
+setup:
+  script: setup/setup.sh
+  timeout_seconds: 240
+  executes_on: runner
+  confirm:
+    must_fail:
+    - running_on_dedicated
+    must_pass:
+    - taint_intact
+verification:
+  engine: kops-verifier/v1
+  criteria_file: verify/criteria.yaml
+  entrypoint: verify/verify.sh
+  pass_rule: all-required
+  settle:
+    max_wait_seconds: 60
+    poll_interval_seconds: 3
+  timeout_seconds: 240
+  credentials: verifier-admin
+reset:
+  strategy: destroy-cluster
+  verify_baseline: true
+reference:
+  solution: reference/solution.sh
+  exposure: hidden
+  negative_solutions:
+  - reference/wrong-remove-taint.sh
+  - reference/wrong-toleration-without-pinning.sh
+metadata:
+  kubernetes_version: '1.35'
+  competency_model: kops-competency/v1.35-r1
+  authors:
+  - kops-a2-team
+  created: '2026-10-02'
+  provenance:
+    file: metadata/provenance.yaml
+    copied_question: false
+    authored_clean_room: true

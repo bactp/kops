@@ -1,0 +1,28 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: cka-sch-drain-maintenance-node-001
+criteria:
+  - id: cordoned
+    invariant: node_cordoned
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Node, selector: "maintenance=scheduled"}, jsonpath: ".spec.unschedulable", op: eq, value: true}
+
+  - id: placement_outside
+    invariant: workload_moved
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.placement, namespace: "{{ns}}", selector: "app={{app}}", min_pods: 4, node_selector: "maintenance=scheduled", mode: outside}
+
+  - id: replicas_four
+    invariant: replicas_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: '.spec.replicas', op: eq, value: 4}
+
+  - id: others_not_cordoned
+    invariant: others_schedulable
+    required: true
+    failure_class: collateral-damage
+    check: {type: k8s.field, resource: {kind: Node, selector: "!maintenance"}, jsonpath: ".spec.unschedulable", op: absent}

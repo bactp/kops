@@ -1,0 +1,35 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-net-hostnetwork-dns-001
+criteria:
+  - id: recent_ok
+    invariant: client_succeeds
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.logs, resource: {kind: Pod, selector: "app=client", namespace: "{{ns}}"}, regex: "^OK ", tail: 3, min_matches: 2}
+
+  - id: recent_no_fail
+    invariant: client_succeeds
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.logs, resource: {kind: Pod, selector: "app=client", namespace: "{{ns}}"}, regex: "^FAIL ", tail: 3, expect: no_match}
+
+  - id: hostnetwork
+    invariant: hostnetwork_kept
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "client", namespace: "{{ns}}"}, jsonpath: '.spec.template.spec.hostNetwork', op: eq, value: true}
+
+  - id: backend_dep
+    invariant: backend_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{svc}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}
+
+  - id: backend_svc
+    invariant: backend_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Service, name: "{{svc}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [.metadata.uid, .spec], baseline: post-setup}

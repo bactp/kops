@@ -1,0 +1,43 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-wl-recreate-strategy-001
+criteria:
+  - id: strategy_type
+    invariant: strategy_recreate
+    required: true
+    failure_class: goal-not-reached
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: ".spec.strategy.type", op: eq, value: Recreate}
+  - id: no_rolling_block
+    invariant: strategy_recreate
+    required: true
+    failure_class: partial-configuration
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: ".spec.strategy.rollingUpdate", op: absent}
+  - id: banner_new
+    invariant: new_version_served
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: kops-probe}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^{{ver}}\s*$'
+      attempts: 5
+  - id: rolled_out
+    invariant: rollout_complete
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check: {type: k8s.rollout_complete, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}}
+  - id: deployment_uid
+    invariant: deployment_not_recreated
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.unchanged, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, scope: jsonpaths, jsonpaths: [".metadata.uid"], baseline: post-setup}
+  - id: replicas_three
+    invariant: replicas_unchanged
+    required: true
+    failure_class: constraint-violation
+    check: {type: k8s.field, resource: {kind: Deployment, name: "{{app}}", namespace: "{{ns}}"}, jsonpath: ".spec.replicas", op: eq, value: 3}

@@ -1,0 +1,44 @@
+apiVersion: kops/v1alpha1
+kind: Criteria
+scenario: kops-net-netpol-cross-namespace-001
+criteria:
+  - id: partner_reaches
+    invariant: partner_can_reach
+    required: true
+    settle: true
+    failure_class: goal-not-reached
+    check:
+      type: net.http
+      from: {namespace: "{{ns}}-partner", labels: {app: client}}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^core-ok\s*$'
+      attempts: 3
+      timeout_seconds: 3
+
+  - id: other_blocked
+    invariant: other_namespace_blocked
+    required: true
+    failure_class: collateral-damage
+    check:
+      type: net.http
+      from: {namespace: "{{ns}}-other", labels: {app: client}}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: blocked
+      attempts: 2
+      timeout_seconds: 3
+
+  - id: same_ns_reaches
+    invariant: same_namespace_allowed
+    required: true
+    failure_class: collateral-damage
+    check:
+      type: net.http
+      from: {namespace: "{{ns}}", labels: {app: client}}
+      url: "http://{{app}}.{{ns}}.svc.cluster.local/"
+      expect: reachable
+      status: 200
+      body_regex: '^core-ok\s*$'
+      attempts: 2
+      timeout_seconds: 3
