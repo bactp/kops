@@ -34,11 +34,12 @@ def base_env(kubeconfig: Path) -> dict:
 
 
 class KindCluster:
-    def __init__(self, name: str):
+    def __init__(self, name: str, workers: int = 0):
         if not name.startswith(config.CLUSTER_PREFIX):
             raise BackendError(f"cluster name must start with {config.CLUSTER_PREFIX!r}")
-        self.name = name
+        self.name, self.workers = name, workers
         config.RUN_DIR.mkdir(parents=True, exist_ok=True)
+        self.kind_config = config.RUN_DIR / f"{name}.kind.yaml"
         self.admin_kubeconfig = config.RUN_DIR / f"{name}.admin.kubeconfig"
         self.agent_kubeconfig = config.RUN_DIR / f"{name}.agent.kubeconfig"
         self.created = False
@@ -50,9 +51,15 @@ class KindCluster:
                 r = _run(["docker", "pull", "-q", img], timeout=600)
                 if r.returncode:
                     raise BackendError(f"docker pull {img} failed: {r.stderr.strip()}")
+        cfg_args: list = []
+        if self.workers:
+            self.kind_config.write_text(
+                "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnodes:\n- role: control-plane\n"
+                + "- role: worker\n" * self.workers)
+            cfg_args = ["--config", self.kind_config]
         r = _run([config.KIND, "create", "cluster", "--name", self.name,
                   "--image", config.KIND_NODE_IMAGE, "--kubeconfig", self.admin_kubeconfig,
-                  "--wait", "180s"], timeout=600)
+                  *cfg_args, "--wait", "180s"], timeout=600 + 120 * self.workers)
         self.created = True  # even a failed create may leave containers behind
         if r.returncode:
             raise BackendError(f"kind create failed: {r.stderr.strip()[-500:]}")
@@ -64,6 +71,9 @@ class KindCluster:
                       "--name", self.name], timeout=300)
             if r.returncode:
                 raise BackendError(f"kind load {img} failed: {r.stderr.strip()[-300:]}")
+        if self.workers:   # `kind create --wait` only waits for the control plane
+            self.kubectl("wait", "--for=condition=Ready", "node", "--all", "--timeout=150s",
+                         check=True, timeout=180)
         self._provision_probe()
         # TODO(identity): the agent should be a distinct identity (client cert / RBAC)
         # so the API audit log can attribute mutations. Phase 1 copies admin credentials.
@@ -89,7 +99,7 @@ class KindCluster:
             _run([config.KIND, "delete", "cluster", "--name", self.name,
                   "--kubeconfig", self.admin_kubeconfig], timeout=120)
             self.created = False
-        for p in (self.admin_kubeconfig, self.agent_kubeconfig):
+        for p in (self.admin_kubeconfig, self.agent_kubeconfig, self.kind_config):
             p.unlink(missing_ok=True)
 
     def container_exists(self) -> bool:
@@ -119,9 +129,17 @@ class KindCluster:
     def _provision_probe(self) -> None:
         """Verifier-owned probe pod used by net.* checks. Not visible to the agent's task."""
         self.kubectl("create", "namespace", config.PROBE_NAMESPACE, check=True)
+        # With workers, pin the (controller-less) probe pod to the control plane so that scenarios
+        # that drain or cordon a worker never evict the verifier's own client.
+        pin = []
+        if self.workers:
+            pin = ["--overrides=" + json.dumps({"spec": {
+                "nodeSelector": {"node-role.kubernetes.io/control-plane": ""},
+                "tolerations": [{"key": "node-role.kubernetes.io/control-plane",
+                                 "operator": "Exists", "effect": "NoSchedule"}]}})]
         self.kubectl("-n", config.PROBE_NAMESPACE, "run", config.PROBE_POD,
                      f"--image={config.PROBE_IMAGE}", "--image-pull-policy=IfNotPresent",
-                     "--restart=Never", "--", "sleep", "86400", check=True)
+                     "--restart=Never", *pin, "--", "sleep", "86400", check=True)
         self.kubectl("-n", config.PROBE_NAMESPACE, "wait", "--for=condition=Ready",
                      f"pod/{config.PROBE_POD}", "--timeout=90s", check=True, timeout=120)
 

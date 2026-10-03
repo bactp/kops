@@ -22,7 +22,8 @@ def up(scenario_dir: Path, seed: int = 1) -> str:
     sp = _state_path(scn.id)
     if sp.exists():
         raise SystemExit(f"A lab for {scn.id} already exists. Run `kops lab down {scn.id}` first.")
-    cluster = KindCluster(f"{config.CLUSTER_PREFIX}lab{uuid.uuid4().hex[:4]}")
+    cluster = KindCluster(f"{config.CLUSTER_PREFIX}lab{uuid.uuid4().hex[:4]}",
+                          workers=scn.raw["backend"]["topology"]["workers"])
     try:
         cluster.create()
         fixtures = config.RUN_DIR / f"{cluster.name}-fixtures"

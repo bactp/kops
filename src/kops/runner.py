@@ -63,7 +63,8 @@ def run_trial(scenario_dir: Path, agent, *, seed: int, experiment: str, trial_in
     run_id = uuid.uuid4().hex[:8]
     trial_id = f"{agent.name}__{scn.id}__s{seed}__t{trial_index}__{run_id}"
     out_dir = (out_root or config.RESULTS_DIR / experiment) / trial_id
-    cluster = KindCluster(f"{config.CLUSTER_PREFIX}{run_id}")
+    cluster = KindCluster(f"{config.CLUSTER_PREFIX}{run_id}",
+                          workers=scn.raw["backend"]["topology"]["workers"])
     trace = Trace()
     record: dict = {
         "schema": SCHEMA, "run_id": run_id, "trial_id": trial_id, "experiment": experiment,

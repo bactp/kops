@@ -190,13 +190,33 @@
                 "gte",
                 "lte",
                 "contains",
-                "subset"
+                "subset",
+                "qty_eq",
+                "qty_gte",
+                "qty_lte"
               ]
             },
             "value": {},
             "all_items": {
               "type": "boolean",
               "default": true
+            },
+            "value_from": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "resource",
+                "jsonpath"
+              ],
+              "description": "Expected value read from another live object (first match) instead of a static `value`.",
+              "properties": {
+                "resource": {
+                  "$ref": "#/$defs/ref"
+                },
+                "jsonpath": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -410,6 +430,13 @@
                 "image": {
                   "type": "string",
                   "description": "Pinned by digest; defaults to the runner's probe image."
+                },
+                "pod": {
+                  "type": "string",
+                  "description": "Exec into this pod instead of the verifier probe pod (must have busybox wget/nc/nslookup)."
+                },
+                "container": {
+                  "type": "string"
                 }
               }
             },
@@ -476,6 +503,13 @@
                 "image": {
                   "type": "string",
                   "description": "Pinned by digest; defaults to the runner's probe image."
+                },
+                "pod": {
+                  "type": "string",
+                  "description": "Exec into this pod instead of the verifier probe pod (must have busybox wget/nc/nslookup)."
+                },
+                "container": {
+                  "type": "string"
                 }
               }
             },
@@ -534,6 +568,13 @@
                 "image": {
                   "type": "string",
                   "description": "Pinned by digest; defaults to the runner's probe image."
+                },
+                "pod": {
+                  "type": "string",
+                  "description": "Exec into this pod instead of the verifier probe pod (must have busybox wget/nc/nslookup)."
+                },
+                "container": {
+                  "type": "string"
                 }
               }
             },
@@ -737,6 +778,91 @@
               "type": "string",
               "minLength": 10,
               "description": "Why no builtin check suffices (reviewed)."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "resource",
+            "regex"
+          ],
+          "properties": {
+            "type": {
+              "const": "k8s.logs"
+            },
+            "resource": {
+              "$ref": "#/$defs/ref"
+            },
+            "container": {
+              "type": "string"
+            },
+            "previous": {
+              "type": "boolean"
+            },
+            "tail": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "regex": {
+              "type": "string"
+            },
+            "expect": {
+              "enum": [
+                "match",
+                "no_match"
+              ],
+              "default": "match"
+            },
+            "min_matches": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "namespace",
+            "selector"
+          ],
+          "description": "Running Pods matching a selector and the nodes they are on.",
+          "properties": {
+            "type": {
+              "const": "k8s.placement"
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "selector": {
+              "type": "string"
+            },
+            "min_pods": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "node_selector": {
+              "type": "string",
+              "description": "label selector of Nodes"
+            },
+            "mode": {
+              "enum": [
+                "within",
+                "outside"
+              ],
+              "default": "within"
+            },
+            "max_per_node": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "min_distinct_nodes": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         }
