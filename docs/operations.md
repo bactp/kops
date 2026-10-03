@@ -52,3 +52,9 @@ checks, restarts, deletes. Prints PASS/FAIL per step.
 - Problems found while building v0.1 and fixed: the sweeper removed selftest sandboxes; the platform could not ssh to nodes
   (policy); blocked DNS made every lookup in the guest wait (kubeadm timed out); the ssh config on `base` was written with
   literal `\n`. Each has a regression test or a note in the code.
+
+## 6. Warm pool
+
+`KOPS_WARM_POOL_SIZE` (ConfigMap `kops-platform`, default 1) is the number of idle single-node clusters the platform keeps ready. A practice session whose scenario needs no extra worker takes one at once (the log shows "using a pre-provisioned cluster") and the pool is refilled in the background; Playground and multi-worker scenarios still provision a new sandbox. Each idle cluster holds about 4 GiB of node memory, so keep the number small. An idle sandbox is evicted when a session that cannot use it needs the room. Pool sandboxes are labelled `kops.io/session=warm-<id>` (ready) or `pool-<id>` (being built); the sweeper never touches them, and the platform removes half-built ones at start. `GET /api/admin/capacity` reports `warm_pool: {target, ready, filling}`. After a failed build the pool waits two minutes before trying again.
+
+Not done on purpose (few users for now): sizing the pool by load, one pool per scenario family, and scheduled refresh of old idle clusters. See the scaling notes in `docs/simulator-design.md` §12.

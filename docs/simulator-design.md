@@ -455,6 +455,10 @@ Verified: the OIDC authorization-code flow with PKCE against the bundled Keycloa
 
 **Deferred to later phases on purpose (not forgotten):** scenarios that change nodes, `kube-system` or shared cluster-scoped state (about 20 of the 60 current scenarios by a rough scan) need `resetDomain` and `reset: vm`; the remaining scenarios must each be re-validated on the KubeVirt provider (so far they are validated on kind only); backlog designs in `docs/scenario-backlog.md`; the scoring proposal in `docs/design-review.md` §K.1; documentation mirror and editor; Mock Exam.
 
+### 12a. Warm pool (v0.1) and later scaling
+
+Measured on the real sandbox: provisioning takes about 2 minutes (VM boot about 40 s, kubeadm about 50 s, baseline and setup about 25 s) and the hosts are not CPU or disk bound (average 20 to 25 percent CPU, no iowait), so more node resources would not shorten it. v0.1 therefore keeps a small fixed pool of ready clusters (`KOPS_WARM_POOL_SIZE`): a practice session adopts one (namespace relabelled, baseline already captured) and only runs the scenario setup (about 15 s). The API reset was also made cheaper (single-call state collection, force-deleted pods): 8 s measured. Later, when there are more users: size the pool from demand and free memory, per-scenario-family pools, pre-injected faults for the most used scenarios, refresh of old idle clusters, and the Mock Exam double buffer (§3b) built on the same adopt mechanism.
+
 ## 13. Decisions
 
 **Resolved:**

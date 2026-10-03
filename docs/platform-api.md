@@ -84,7 +84,7 @@ Status rules: `attempted` = at least one CHECK but never PASS; `solved` = a PASS
 - `GET /api/admin/sessions` → all sessions (with owner).
 - `DELETE /api/admin/sessions/{id}` → destroy any session.
 - `GET /api/admin/users` → `[{"id","username","email","created_at","last_seen_at","active_session":"s_…"|null,"sessions_total":N}]`.
-- `GET /api/admin/capacity` → `{"provider":"kubevirt","max_sessions":2,"active_sessions":1,"nodes":[{"name":"kops-worker-1","memory_allocatable_mib":15000,"memory_requested_mib":9000}],"orphans":0}`.
+- `GET /api/admin/capacity` → `{"provider":"kubevirt","max_sessions":2,"active_sessions":1,"nodes":[{"name":"kops-worker-1","memory_allocatable_mib":15000,"memory_requested_mib":9000}],"orphans":0,"warm_pool":{"target":1,"ready":1,"filling":0}}`.
 
 ## Health
 
