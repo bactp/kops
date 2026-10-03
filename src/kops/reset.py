@@ -28,6 +28,15 @@ _DROP = {"resourceVersion", "uid", "creationTimestamp", "managedFields", "genera
 _DROP_ANNOTATIONS = {"kubectl.kubernetes.io/last-applied-configuration",
                      "deployment.kubernetes.io/revision"}
 
+_PLURAL = {"Namespace": "namespaces", "StorageClass": "storageclasses", "ClusterRole": "clusterroles",
+           "ClusterRoleBinding": "clusterrolebindings", "PriorityClass": "priorityclasses",
+           "PersistentVolume": "persistentvolumes", "ConfigMap": "configmaps", "ServiceAccount": "serviceaccounts",
+           "Deployment": "deployments", "DaemonSet": "daemonsets", "StatefulSet": "statefulsets",
+           "Service": "services", "NetworkPolicy": "networkpolicies", "Role": "roles",
+           "RoleBinding": "rolebindings", "Ingress": "ingresses", "PersistentVolumeClaim": "persistentvolumeclaims",
+           "Job": "jobs", "CronJob": "cronjobs", "HorizontalPodAutoscaler": "horizontalpodautoscalers",
+           "PodDisruptionBudget": "poddisruptionbudgets", "Secret": "secrets"}
+
 Key = tuple[str, str, str]   # (kind, namespace, name)
 
 
@@ -85,24 +94,44 @@ class Reset:
         self.namespaced_kinds = list(NAMESPACED_KINDS if namespaced_kinds is None else namespaced_kinds)
         self.ignored = IGNORED if ignored is None else ignored
 
-    def collect(self) -> dict[Key, dict]:
+    def _add(self, objs: dict, kind: str, it: dict) -> None:
+        md = it["metadata"]
+        if (kind, md["name"]) in self.ignored:
+            return
+        obj = _strip(it)
+        if kind == "secrets":   # never keep secret material: track presence and a hash only
+            obj = {"__sha__": hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()}
+        if md.get("deletionTimestamp"):
+            obj["__terminating__"] = True
+        objs[(kind, md.get("namespace", ""), md["name"])] = obj
+
+    def _collect_combined(self, kinds: list[str]) -> dict[Key, dict] | None:
+        """One kubectl call for every kind (about 6x faster than one call per kind); None if it fails."""
+        r = self.cluster.kubectl("get", ",".join(kinds), "-A", "-o", "json", timeout=90)
+        if r.returncode:
+            return None
         objs: dict[Key, dict] = {}
-        for kind in self.cluster_kinds + self.namespaced_kinds:
+        for it in json.loads(r.stdout).get("items", []):
+            kind = _PLURAL.get(it.get("kind", ""))
+            if kind is None or kind not in kinds:
+                return None
+            self._add(objs, kind, it)
+        return objs
+
+    def collect(self) -> dict[Key, dict]:
+        kinds = self.cluster_kinds + self.namespaced_kinds
+        if getattr(self.cluster, "multi_get", False) and set(kinds) <= set(_PLURAL.values()):
+            objs = self._collect_combined(kinds)
+            if objs is not None:
+                return objs
+        objs = {}
+        for kind in kinds:
             scope = [] if kind in self.cluster_kinds else ["-A"]
             r = self.cluster.kubectl("get", kind, *scope, "-o", "json", timeout=60)
             if r.returncode:   # kind not served by this cluster: nothing to track
                 continue
             for it in json.loads(r.stdout).get("items", []):
-                md = it["metadata"]
-                if (kind, md["name"]) in self.ignored:
-                    continue
-                key = (kind, md.get("namespace", ""), md["name"])
-                obj = _strip(it)
-                if kind == "secrets":   # never keep secret material: track presence and a hash only
-                    obj = {"__sha__": hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()}
-                if md.get("deletionTimestamp"):
-                    obj["__terminating__"] = True
-                objs[key] = obj
+                self._add(objs, kind, it)
         return objs
 
     def capture_baseline(self) -> Baseline:
@@ -111,10 +140,10 @@ class Reset:
     def digest(self) -> str:
         return digest_of(self.collect())
 
-    def reset(self, base: Baseline) -> ResetReport:
-        """One pass: delete extra objects, put back changed or removed ones."""
+    def reset(self, base: Baseline, cur: dict | None = None) -> ResetReport:
+        """One pass: delete extra objects, put back changed or removed ones. `cur` is a fresh `collect()`."""
         rep = ResetReport()
-        cur = self.collect()
+        cur = self.collect() if cur is None else cur
         extra = [k for k in cur if k not in base.objects and not cur[k].get("__terminating__")]
         for key in extra:       # namespaces first: their contents go with them
             if key[0] == "namespaces":
@@ -136,18 +165,24 @@ class Reset:
         deadline = time.monotonic() + timeout
         n = 0
         while True:
-            if self.digest() == base.digest:
+            cur = self.collect()
+            if digest_of(cur) == base.digest:
                 return True
             if time.monotonic() >= deadline:
                 return False
             if n < passes or n % 5 == 0:
-                self.reset(base)
+                self.reset(base, cur)
             n += 1
             time.sleep(interval)
 
     # -- helpers ---------------------------------------------------------------------------
     def _delete(self, key: Key, rep: ResetReport) -> None:
         kind, ns, name = key
+        if kind == "namespaces" and getattr(self.cluster, "multi_get", False):
+            # a namespace stays Terminating until its pods are gone (30 s of grace for a pod that ignores SIGTERM):
+            # remove them at once, there is nothing to preserve in a scenario's own namespace
+            self.cluster.kubectl("delete", "pods", "--all", "-n", name, "--grace-period=0", "--force",
+                                 "--wait=false", "--ignore-not-found", timeout=60)
         args = ["delete", kind, name, "--wait=false", "--ignore-not-found"] + (["-n", ns] if ns else [])
         r = self.cluster.kubectl(*args, timeout=60)
         if r.returncode:

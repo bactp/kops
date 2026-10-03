@@ -140,6 +140,8 @@ class KubeVirtSandbox:
         self.ips: dict[str, str] = {}
 
     # verifier-side API
+    multi_get = True      # real kubectl: `get a,b,c -A` works (the API reset uses it to collect state in one call)
+
     def kubectl(self, *args: str, input: str | None = None, timeout: int = 60, check: bool = False):
         r = self.p.run([self.p.cfg.kubectl, "--kubeconfig", str(self.admin_kubeconfig), *args],
                        input=input, timeout=timeout)
@@ -366,6 +368,17 @@ class KubeVirtProvider:
             if ip:
                 sb.ips[v["metadata"]["name"]] = ip
         return sb
+
+    def adopt(self, sandbox_id: str, session_id: str, owner: str, ttl_seconds: int):
+        """Hand a sandbox to another owner/session id (the warm pool uses this); returns the re-attached sandbox."""
+        ns = sandbox_id
+        self.kube("label", "ns", ns, f"kops.io/session={label_safe(session_id)}",
+                  f"kops.io/owner={label_safe(owner)}", "--overwrite")
+        self.kube("annotate", "ns", ns, f"kops.io/owner={owner}", f"kops.io/created={int(time.time())}",
+                  f"kops.io/ttl={ttl_seconds}", "--overwrite")
+        self.kube("-n", self.cfg.platform_ns, "label", "secret", self._secret_name(ns),
+                  f"kops.io/session={label_safe(session_id)}", "--overwrite")
+        return self.attach(sandbox_id)
 
     def recreate(self, sb: KubeVirtSandbox, progress):
         progress("deleting VMs")

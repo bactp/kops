@@ -32,6 +32,7 @@ class Settings:
     oidc_admin_role: str = ""
     max_sessions: int = 0                   # 0: whatever the provider reports
     sessions_per_user: int = 1
+    warm_pool_size: int = 0                 # ready-made single-node clusters kept idle for practice sessions
     practice_ttl_minutes: int = 120
     playground_ttl_minutes: int = 120
     max_extensions: int = 2
@@ -66,6 +67,7 @@ class Settings:
             oidc_admin_role=e.get("KOPS_OIDC_ADMIN_ROLE", ""),
             max_sessions=int(e.get("KOPS_MAX_SESSIONS", "0") or 0),
             sessions_per_user=int(e.get("KOPS_SESSIONS_PER_USER", "1")),
+            warm_pool_size=int(e.get("KOPS_WARM_POOL_SIZE", "0") or 0),
             practice_ttl_minutes=int(e.get("KOPS_PRACTICE_TTL_MINUTES", "120")),
             playground_ttl_minutes=int(e.get("KOPS_PLAYGROUND_TTL_MINUTES", "120")),
             max_extensions=int(e.get("KOPS_MAX_EXTENSIONS", "2")),

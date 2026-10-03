@@ -31,6 +31,8 @@ log = logging.getLogger("kops.service")
 TERMINAL = {"ENDED", "DESTROYED", "INVALID"}      # no longer counts against the quota
 GONE = {"ENDED", "DESTROYED"}
 OPEN = {"ACTIVE", "CHECKING"}
+WARM, BUILDING = "warm-", "pool-"                 # session-id prefixes of idle pool sandboxes (ready / being built)
+FILL_BACKOFF = 120.0                              # seconds to wait after a failed pool fill
 
 
 def _default_verifier(sandbox, criteria, settle):
@@ -47,9 +49,17 @@ class SessionService:
         self._lock = threading.Lock()
         self._destroying: set[str] = set()
         self._scn_cache: dict[tuple, Scenario] = {}
+        # warm pool: sandbox id -> (sandbox, baseline json or None); in memory, rebuilt from the provider on restart
+        self._warm: dict[str, tuple] = {}
+        self._claimed: dict[str, tuple] = {}
+        self._filling = 0
+        self._fill_failed = float("-inf")
+        self._warm_lock = threading.Lock()
+        self._fill_exec = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kops-fill")
 
     def shutdown(self) -> None:
         self._pool.shutdown(wait=False, cancel_futures=True)
+        self._fill_exec.shutdown(wait=False, cancel_futures=True)
 
     # -- small DB helpers ------------------------------------------------------------------
     def _row(self, s, sid: str) -> SessionRow:
@@ -168,27 +178,30 @@ class SessionService:
                 raise ApiError("invalid_request", "playground is disabled")
         else:
             raise ApiError("invalid_request", "type must be practice or playground")
+        scn, workers = None, 1
+        if entry:
+            seed = int(seed) if seed is not None else random.randrange(1, 2 ** 31)
+            scn = self.scenario(entry, seed)
+            workers = scn.raw["backend"]["topology"]["workers"]
         with self._lock:
             with self.db.session() as s:
                 n = s.scalar(select(func.count()).select_from(SessionRow).where(
                     SessionRow.user_id == user.id, SessionRow.state.not_in(TERMINAL))) or 0
             if n >= self.cfg.sessions_per_user:
                 raise ApiError("quota_exceeded", "you already have an active session")
-            _, maxs, active = self._capacity()
-            if active >= maxs:
-                raise ApiError("capacity_exceeded", "no capacity right now, try again later")
             sid = "s_" + secrets.token_hex(4)
+            warm = self._take_warm(sid) if (typ == "practice" and workers == 0) else None
+            if warm is None:
+                _, maxs, active = self._capacity()
+                if active >= maxs and not self._evict_warm():   # an idle pool sandbox yields its room to a session
+                    raise ApiError("capacity_exceeded", "no capacity right now, try again later")
             ttl = self.cfg.practice_ttl_minutes if typ == "practice" else self.cfg.playground_ttl_minutes
             row = SessionRow(id=sid, user_id=user.id, type=typ, state="REQUESTED",
                              expires_at=utcnow() + timedelta(minutes=ttl))
+            row.workers = workers
             if entry:
-                seed = int(seed) if seed is not None else random.randrange(1, 2 ** 31)
-                scn = self.scenario(entry, seed)
                 row.scenario_id, row.seed, row.params_json = entry.id, seed, json.dumps(scn.params)
                 row.reset_mode = entry.reset
-                row.workers = scn.raw["backend"]["topology"]["workers"]
-            else:
-                row.workers = 1
             with self.db.session() as s:
                 s.add(row)
                 s.commit()
@@ -206,8 +219,10 @@ class SessionService:
                                    ttl_seconds=int((row.expires_at - utcnow()).total_seconds()),
                                    labels={"kops-session": sid, "kops-owner": owner})
                 typ, entry = row.type, self.catalog.get(row.scenario_id or "")
-            self.log(sid, "provisioning sandbox")
-            sb = self.provider.provision(spec, lambda line: self.log(sid, line))
+            sb = self._adopt_warm(sid, owner, spec.ttl_seconds) if sid in self._claimed else None
+            if sb is None:
+                self.log(sid, "provisioning sandbox")
+                sb = self.provider.provision(spec, lambda line: self.log(sid, line))
             self._sandboxes[sid] = sb
             self.update(sid, sandbox_id=sb.id)
             if self.state_of(sid) in GONE:
@@ -222,6 +237,89 @@ class SessionService:
             self._setup_flow(sid, entry)
         except Exception as e:
             self._invalid(sid, f"provisioning failed: {_short(e)}")
+        finally:
+            self._claimed.pop(sid, None)
+            self._fill_exec.submit(self.refill)
+
+    # -- warm pool ---------------------------------------------------------------------------
+    def _take_warm(self, sid: str):
+        """Reserve an idle pool sandbox for session `sid` (None if there is none)."""
+        with self._warm_lock:
+            if not self._warm:
+                return None
+            box, entry = self._warm.popitem()
+            self._claimed[sid] = entry
+            return entry
+
+    def _evict_warm(self) -> bool:
+        with self._warm_lock:
+            if not self._warm:
+                return False
+            box, _ = self._warm.popitem()
+        log.info("evicting idle pool sandbox %s to make room", box)
+        self._pool.submit(self._destroy_box, box)
+        return True
+
+    def _adopt_warm(self, sid: str, owner: str, ttl_seconds: int):
+        """Make a reserved pool sandbox the session's own; None means: provision a fresh one instead."""
+        old, pristine = self._claimed[sid]
+        try:
+            if old.kubectl("get", "--raw", "/readyz", timeout=20).returncode:
+                raise RuntimeError("the idle cluster is not healthy")
+            self.log(sid, "using a pre-provisioned cluster")
+            sb = self.provider.adopt(old.id, sid, owner, ttl_seconds)
+        except Exception as e:
+            log.warning("pool sandbox %s unusable (%s); provisioning a new one", old.id, e)
+            self._pool.submit(self._destroy_box, old.id)
+            return None
+        if pristine:
+            self.update(sid, pristine_json=pristine)
+        return sb
+
+    def refill(self) -> None:
+        """Start building a pool sandbox if the pool is below its target and there is room (one at a time)."""
+        n = self.cfg.warm_pool_size
+        if n <= 0 or time.monotonic() - self._fill_failed < FILL_BACKOFF:
+            return
+        with self._warm_lock:
+            if self._filling or len(self._warm) >= n:
+                return
+            self._filling += 1
+        try:
+            _, maxs, active = self._capacity()
+            if active >= maxs:
+                raise ApiError("capacity_exceeded", "no room for a pool sandbox")
+        except Exception:
+            with self._warm_lock:
+                self._filling -= 1
+            return
+        self._fill_exec.submit(self._fill_one)
+
+    def _fill_one(self) -> None:
+        pid = BUILDING + secrets.token_hex(4)
+        box = None
+        try:
+            spec = SandboxSpec(session_id=pid, owner="pool", workers=0, ttl_seconds=10 ** 7)
+            sb = self.provider.provision(spec, lambda line: log.info("pool %s: %s", pid, line))
+            box = sb.id
+            baseline = Reset(sb).capture_baseline().to_json()
+            sb = self.provider.adopt(sb.id, WARM + pid[len(BUILDING):], "pool", 10 ** 7)
+            with self._warm_lock:
+                self._warm[sb.id] = (sb, baseline)
+            log.info("pool sandbox %s ready", sb.id)
+        except Exception as e:
+            log.warning("pool fill failed: %s", _short(e))
+            self._fill_failed = time.monotonic()
+            if box:
+                self._destroy_box(box)
+        finally:
+            with self._warm_lock:
+                self._filling -= 1
+        self.refill()
+
+    def pool_status(self) -> dict:
+        with self._warm_lock:
+            return {"target": self.cfg.warm_pool_size, "ready": len(self._warm), "filling": self._filling}
 
     def _setup_flow(self, sid: str, entry: Entry) -> None:
         """SETUP -> CONFIRMING -> ACTIVE for the scenario currently stored on the session."""
@@ -496,6 +594,8 @@ class SessionService:
             log.warning("sweeper cannot list sandboxes: %s", e)
             return {"expired": expired, "orphans": 0}
         for ref in refs:
+            if ref.session_id.startswith((WARM, BUILDING)):   # the pool owns these
+                continue
             with self.db.session() as s:
                 row = s.get(SessionRow, ref.session_id)
                 dead = row is None or row.state in TERMINAL or row.sandbox_id not in (None, ref.sandbox_id)
@@ -505,6 +605,7 @@ class SessionService:
                 orphans += 1
                 if row is not None and row.state == "ENDED":
                     self.transition(row.id, "DESTROYED")
+        self.refill()
         return {"expired": expired, "orphans": orphans}
 
     def orphan_count(self) -> int:
@@ -514,6 +615,8 @@ class SessionService:
             return 0
         n = 0
         for ref in refs:
+            if ref.session_id.startswith((WARM, BUILDING)):
+                continue
             with self.db.session() as s:
                 row = s.get(SessionRow, ref.session_id)
             if row is None or row.state in TERMINAL:
@@ -522,6 +625,14 @@ class SessionService:
 
     def recover(self) -> None:
         """After a restart: re-attach live sessions, fail the ones caught mid-transition."""
+        try:    # pool sandboxes: idle ones are re-attached, half-built ones are removed
+            for ref in self.provider.list_owned():
+                if ref.session_id.startswith(WARM):
+                    self._warm[ref.sandbox_id] = (self.provider.attach(ref.sandbox_id), None)
+                elif ref.session_id.startswith(BUILDING):
+                    self._destroy_box(ref.sandbox_id)
+        except Exception as e:
+            log.warning("could not recover the warm pool: %s", e)
         with self.db.session() as s:
             rows = s.scalars(select(SessionRow).where(SessionRow.state.not_in(TERMINAL))).all()
         for row in rows:
@@ -549,7 +660,8 @@ class SessionService:
     def admin_capacity(self) -> dict:
         cap, _, active = self._capacity()
         return {"provider": self.provider.name, "max_sessions": cap.max_sessions,
-                "active_sessions": active, "nodes": cap.nodes, "orphans": self.orphan_count()}
+                "active_sessions": active, "nodes": cap.nodes, "orphans": self.orphan_count(),
+                "warm_pool": self.pool_status()}
 
 
 def _short(e: Exception) -> str:

@@ -21,6 +21,7 @@ data:
   KOPS_ADMIN_USERS: __ADMIN_USERS__
   KOPS_OIDC_ADMIN_ROLE: kops-admin
   KOPS_MAX_SESSIONS: "__MAX_SESSIONS__"
+  KOPS_WARM_POOL_SIZE: "1"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -42,8 +43,8 @@ spec:
             - configMapRef: {name: kops-platform}
             - secretRef: {name: kops-platform-secret}
           ports: [{containerPort: 8000}]
-          readinessProbe: {httpGet: {path: /readyz, port: 8000}, periodSeconds: 10, failureThreshold: 6}
-          livenessProbe: {httpGet: {path: /healthz, port: 8000}, periodSeconds: 20, failureThreshold: 6}
+          readinessProbe: {httpGet: {path: /readyz, port: 8000}, periodSeconds: 10, timeoutSeconds: 10, failureThreshold: 6}
+          livenessProbe: {httpGet: {path: /healthz, port: 8000}, periodSeconds: 20, timeoutSeconds: 10, failureThreshold: 6}
           resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 1Gi}}
           volumeMounts:
             - {name: data, mountPath: /data}

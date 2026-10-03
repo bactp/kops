@@ -205,6 +205,12 @@ class FakeProvider:
         self.recreated.append(sb.id)
         return sb
 
+    def adopt(self, sandbox_id: str, session_id: str, owner: str, ttl_seconds: int) -> FakeSandbox:
+        sb = self.sandboxes[sandbox_id]
+        sb.session_id = session_id
+        self.refs[sandbox_id] = SandboxRef(sandbox_id, session_id, owner, time.time())
+        return sb
+
     def destroy(self, sandbox_id: str) -> None:
         self.sandboxes.pop(sandbox_id, None)
         self.refs.pop(sandbox_id, None)

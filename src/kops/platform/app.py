@@ -50,6 +50,7 @@ def create_app(settings: Settings, provider, verifier_factory=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await asyncio.to_thread(service.recover)
+        await asyncio.to_thread(service.refill)
         task = asyncio.create_task(sweeper()) if settings.sweep_interval_seconds > 0 else None
         yield
         if task:

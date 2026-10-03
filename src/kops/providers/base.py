@@ -76,6 +76,9 @@ class SandboxProvider(Protocol):
     def recreate(self, sb: Sandbox, progress: Callable[[str], None]) -> Sandbox:
         """Reset by recreation: destroy the VMs and bring up a fresh cluster in the same sandbox."""
 
+    def adopt(self, sandbox_id: str, session_id: str, owner: str, ttl_seconds: int) -> Sandbox:
+        """Re-label an existing sandbox for another session (used to hand out warm-pool sandboxes)."""
+
     def destroy(self, sandbox_id: str) -> None: ...
 
     def list_owned(self) -> list[SandboxRef]:
