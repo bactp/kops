@@ -4,7 +4,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+# KOPS_ROOT lets an installed package (the container image) find scenarios/ and schemas/
+ROOT = Path(os.environ.get("KOPS_ROOT") or Path(__file__).resolve().parents[2])
 BIN_DIR = Path(os.environ.get("KOPS_BIN", Path.home() / ".local/share/kops/bin"))
 KIND = BIN_DIR / "kind"
 KUBECTL = BIN_DIR / "kubectl"

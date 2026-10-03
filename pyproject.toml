@@ -1,12 +1,17 @@
 [project]
 name = "kops"
-version = "0.0.1"
+version = "0.1.0"
 description = "KOPS Track A2: executable CKA/CKAD benchmark environment for AI agents"
 requires-python = ">=3.11"
-dependencies = ["pyyaml>=6"]
+dependencies = [
+  "pyyaml>=6", "fastapi>=0.115", "uvicorn[standard]>=0.30", "sqlalchemy>=2.0", "authlib>=1.3",
+  "httpx>=0.27", "jsonschema>=4.20", "itsdangerous>=2.2", "websockets>=12", "python-multipart>=0.0.9",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "jsonschema>=4.20"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "jsonschema>=4.20"]
+# jsonschema is also needed at runtime by `kops lint`
+
 
 [project.scripts]
 kops = "kops.cli:main"
@@ -20,4 +25,4 @@ packages = ["src/kops"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["e2e: needs docker + kind (set KOPS_E2E=1)"]
+markers = ["e2e: needs docker + kind (set KOPS_E2E=1)", "cluster: needs the KubeVirt cluster (set KOPS_CLUSTER=1)"]
